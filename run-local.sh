@@ -42,4 +42,13 @@ esac
 [ -d "$ROOT/distfiles" ] || die "no distfiles at $ROOT/distfiles -- run ./fetch-distfiles.sh first"
 
 cd "$ROOT/seed"
-exec "./bootstrap-seeds/POSIX/$DIR/kaem-optional-seed" "kaem.$ARCH"
+"./bootstrap-seeds/POSIX/$DIR/kaem-optional-seed" "kaem.$ARCH"
+
+# The AArch64 seed does not propagate a nested kaem failure as its exit status
+# (the AMD64 one does), so assert the deliverable rather than trusting $?: the
+# store dash the shell phase runs on. shpack.conf is valid sh, so read STORE
+# from it the way the driver does.
+STORE=
+[ -f "$ROOT/shpack.conf" ] && . "$ROOT/shpack.conf"
+[ -x "${STORE:-$ROOT/store}/dash-0.5.12/bin/sh" ] \
+    || die "bootstrap failed: no ${STORE:-$ROOT/store}/dash-0.5.12/bin/sh (see the output above)"
