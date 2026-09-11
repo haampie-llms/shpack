@@ -30,28 +30,38 @@ esac
 
 SHPACK_LIB=$SHPACK_ROOT/lib
 
+# The configuration is the environment. The kaem driver (bootstrap/start.kaem)
+# exports ROOT STORE DISTFILES BUILDDIR ARCH and BASEPATH (its final PATH, the
+# kaem-phase prefixes over the seed prefixes) after applying shpack.conf; the
+# test fixture exports the same names. There is no config file to find.
+for v in ROOT STORE DISTFILES ARCH; do
+    eval "val=\${$v:-}"
+    [ -n "$val" ] || die "$v is not set (shpack is started by bootstrap/start.kaem)"
+done
+BUILDDIR=${BUILDDIR:-$ROOT/tmp}
+BASEPATH=${BASEPATH:-$PATH}
+
+# JOBS: parallel package builds. Default: the number of online CPUs, read the
+# only way the tool budget allows (no nproc in coreutils 5.0).
+if [ -z "${JOBS:-}" ]; then
+    JOBS=1
+    if [ -r /sys/devices/system/cpu/online ]; then
+        read -r online < /sys/devices/system/cpu/online
+        case $online in
+            *-*) JOBS=$((${online##*[-,]} + 1)) ;;
+        esac
+    fi
+fi
+
 # Overridable locations, so tests (and a future multi-repo setup) can point
-# shpack at a scratch state dir, another package repo, or another config.
-VAR=${SHPACK_VAR:-/tmp/shpack}
+# shpack at a scratch state dir or another package repo / externals table.
+VAR=${SHPACK_VAR:-$BUILDDIR/shpack}
 REPO=${SHPACK_REPO:-$SHPACK_ROOT/packages}
 EXTERNALS=${SHPACK_EXTERNALS:-$SHPACK_ROOT/etc/externals}
-CONFIG=${SHPACK_CONFIG:-$SHPACK_ROOT/etc/config}
 
-[ -f "$CONFIG" ] || die "no config at $CONFIG (set SHPACK_CONFIG?)"
-. "$CONFIG"
-
-for v in ARCH JOBS STORE DISTFILES BASEPATH CONFIG_SHELL; do
-    eval "val=\${$v:-}"
-    [ -n "$val" ] || die "config $CONFIG does not set $v"
-done
-
-# Optional: the Landlock launcher dag.mk wraps each build step in. Empty (or
-# unset, e.g. the test fixture) means build unsandboxed.
-SANDBOX=${SANDBOX:-}
-
-# Optional: the shebang rewriter builder.sh runs on each source tree. Empty
-# (or unset, e.g. the test fixture) means leave shebangs as-is.
-PATCH_SHEBANGS=${PATCH_SHEBANGS:-}
+# Derived settings (CONFIG_SHELL, SANDBOX, PATCH_SHEBANGS, SHPACK_BOOTSTRAP_MAKE),
+# each overridable from the environment.
+. "$SHPACK_ROOT/etc/config"
 export PATCH_SHEBANGS
 
 . "$SHPACK_LIB/spec.sh"
@@ -62,8 +72,8 @@ export PATCH_SHEBANGS
 mkdir -p "$VAR"
 
 # Children spawned from dag.mk recipes must see the same world.
-export SHPACK_VAR="$VAR" SHPACK_REPO="$REPO" SHPACK_EXTERNALS="$EXTERNALS" \
-       SHPACK_CONFIG="$CONFIG"
+export ROOT STORE DISTFILES BUILDDIR ARCH JOBS BASEPATH \
+       SHPACK_VAR="$VAR" SHPACK_REPO="$REPO" SHPACK_EXTERNALS="$EXTERNALS"
 
 # The dag.mk driver-make shell (see etc/config). SHELL mirrors it so the top
 # make avoids a /bin/sh shebang lookup; per-node builds override SHELL with their
@@ -86,7 +96,19 @@ usage: shpack <command> [args]
                         from dag.mk recipes)
   env <name|id>         print the composed build environment of a node
   find                  list concretized/installed packages
+  shell                 interactive store dash with `shpack` on hand
 EOF
+}
+
+# cmd_shell -- an interactive session on the store dash, the base PATH, and a
+# `shpack` function (etc/shrc, dash's $ENV) so the driver can be called by
+# name. This is what COMMAND=shell in shpack.conf runs.
+cmd_shell() {
+    PATH=$BASEPATH
+    ENV=$SHPACK_ROOT/etc/shrc
+    export PATH ENV SHPACK_ROOT
+    echo "shpack shell: $CONFIG_SHELL with the store on PATH; exit to leave"
+    exec "$CONFIG_SHELL" -i
 }
 
 cmd=${1:-help}
@@ -99,6 +121,7 @@ case $cmd in
     build-one)      cmd_build_one "$@" ;;
     env)            cmd_env "$@" ;;
     find)           cmd_find "$@" ;;
+    shell)          cmd_shell "$@" ;;
     help|-h|--help) usage ;;
     *)              usage >&2; die "unknown command '$cmd'" ;;
 esac

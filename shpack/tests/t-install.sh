@@ -43,7 +43,7 @@ install() {
 }
 EOF
 
-echo "SHPACK_BOOTSTRAP_MAKE=gmake@4.4.1" >> "$SHPACK_CONFIG"
+export SHPACK_BOOTSTRAP_MAKE=gmake@4.4.1
 
 shpack install tarpkg > "$TESTDIR/install.log" 2>&1 \
     || { cat "$TESTDIR/install.log"; fail "install failed"; }

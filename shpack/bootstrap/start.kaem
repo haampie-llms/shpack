@@ -1,0 +1,278 @@
+# SPDX-License-Identifier: MIT
+#
+# The shpack driver: the whole "package manager" of the kaem phase. Included by
+# start.<arch>.kaem, which seed/after.kaem execs on shpack's own kaem with an
+# EMPTY environment (only ARCH/ARCH_DIR are set) and CWD = seed/, the directory
+# the stage0 seed was exec'd from. Nothing outside the tree is consulted: every
+# path is derived from ${PWD} here, and the configuration is a file in the tree.
+#
+#   1. locate the tree, apply shpack.conf over the defaults
+#   2. install the stage0 tools into the store, grow tcc_cc + stack_c, check them
+#   3. the static package chain: simple-patch -> tcc-0.9.26 (+ subset musl) ->
+#      full musl -> tcc-0.9.27 -> make -> patch -> gzip -> tar -> sed -> bzip2
+#      -> coreutils -> dash. One prefix ${STORE}/<name-version> and one PATH
+#      prepend per package, each built by a child kaem on its kaem.run.
+#   4. dash is the first shell: exec it on shpack for the shell phase
+#      (concretize + build up to gcc/spack, see the top-level README.md).
+
+# --- 1. locate + configure ------------------------------------------------------
+# kaem sets PWD from getcwd() and refreshes it on cd (shpack addition), so the
+# tree root is one level up from the seed working tree we were launched in.
+cd ..
+ROOT=${PWD}
+SEEDDIR=${ROOT}/seed
+BOOT=${ROOT}/shpack/bootstrap
+MESR=${ROOT}/vendor/mes-replacement
+
+# Defaults, overridable by ${ROOT}/shpack.conf: plain KEY=VALUE lines that are
+# valid kaem and valid sh (see shpack.conf.example). Everything assigned here
+# is exported to every child, including the shell phase.
+STORE=${ROOT}/store
+DISTFILES=${ROOT}/distfiles
+BUILDDIR=${ROOT}/tmp
+COMMAND=install
+SPEC=gcc
+include-optional ${ROOT}/shpack.conf
+
+TMPDIR=${BUILDDIR}
+HOME=${BUILDDIR}/home
+TERM=dumb
+
+# --- 2. the seed layer ----------------------------------------------------------
+# stage0-posix left every tool in ${SEEDDIR}/${ARCH_DIR}/bin. Install them into
+# per-package store prefixes (a Spack-style store, like every other package in
+# this build), by upstream package + version. Explicit paths until PATH is set.
+S0=${SEEDDIR}/${ARCH_DIR}/bin
+T=${BUILDDIR}/stage0
+${S0}/mkdir -p ${STORE}/mescc-tools-1.7.0/bin
+${S0}/mkdir -p ${STORE}/mescc-tools-extra-1.4.0/bin
+${S0}/mkdir -p ${STORE}/M2-Mesoplanet-1.13.0/bin
+${S0}/mkdir -p ${STORE}/tcc_cc/bin
+${S0}/mkdir -p ${STORE}/stack_c/bin
+${S0}/mkdir -p ${T}
+${S0}/mkdir -p ${HOME}
+
+# mescc-tools 1.7.0 -- kaem is shpack's build (seed/after.kaem), not upstream's.
+${S0}/cp ${S0}/blood-elf     ${STORE}/mescc-tools-1.7.0/bin/blood-elf
+${S0}/cp ${S0}/M1            ${STORE}/mescc-tools-1.7.0/bin/M1
+${S0}/cp ${S0}/hex2          ${STORE}/mescc-tools-1.7.0/bin/hex2
+${S0}/cp ${SEEDDIR}/${ARCH_DIR}/artifact/shpack-kaem/kaem ${STORE}/mescc-tools-1.7.0/bin/kaem
+${S0}/cp ${S0}/catm          ${STORE}/mescc-tools-1.7.0/bin/catm
+${S0}/cp ${S0}/match         ${STORE}/mescc-tools-1.7.0/bin/match
+${S0}/cp ${S0}/mkdir         ${STORE}/mescc-tools-1.7.0/bin/mkdir
+${S0}/cp ${S0}/cp            ${STORE}/mescc-tools-1.7.0/bin/cp
+${S0}/cp ${S0}/chmod         ${STORE}/mescc-tools-1.7.0/bin/chmod
+${S0}/cp ${S0}/rm            ${STORE}/mescc-tools-1.7.0/bin/rm
+${S0}/cp ${S0}/sha256sum     ${STORE}/mescc-tools-1.7.0/bin/sha256sum
+# mescc-tools-extra 1.4.0
+${S0}/cp ${S0}/ungz          ${STORE}/mescc-tools-extra-1.4.0/bin/ungz
+${S0}/cp ${S0}/unbz2         ${STORE}/mescc-tools-extra-1.4.0/bin/unbz2
+${S0}/cp ${S0}/unxz          ${STORE}/mescc-tools-extra-1.4.0/bin/unxz
+${S0}/cp ${S0}/untar         ${STORE}/mescc-tools-extra-1.4.0/bin/untar
+${S0}/cp ${S0}/replace       ${STORE}/mescc-tools-extra-1.4.0/bin/replace
+# M2-Mesoplanet 1.13.0
+${S0}/cp ${S0}/M2-Mesoplanet ${STORE}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
+
+# mescc-tools cp uses fopen(dest,"w") and does not preserve the execute bit,
+# so the copies land at 0600. Make them executable.
+${S0}/chmod 755 ${STORE}/mescc-tools-1.7.0/bin/blood-elf ${STORE}/mescc-tools-1.7.0/bin/M1 ${STORE}/mescc-tools-1.7.0/bin/hex2 ${STORE}/mescc-tools-1.7.0/bin/kaem ${STORE}/mescc-tools-1.7.0/bin/catm ${STORE}/mescc-tools-1.7.0/bin/match ${STORE}/mescc-tools-1.7.0/bin/mkdir ${STORE}/mescc-tools-1.7.0/bin/cp ${STORE}/mescc-tools-1.7.0/bin/chmod ${STORE}/mescc-tools-1.7.0/bin/rm ${STORE}/mescc-tools-1.7.0/bin/sha256sum ${STORE}/mescc-tools-extra-1.4.0/bin/ungz ${STORE}/mescc-tools-extra-1.4.0/bin/unbz2 ${STORE}/mescc-tools-extra-1.4.0/bin/unxz ${STORE}/mescc-tools-extra-1.4.0/bin/untar ${STORE}/mescc-tools-extra-1.4.0/bin/replace ${STORE}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
+
+# MES-replacement: stack_c (stack-IR -> asm transpiler) from C source with
+# M2-Planet, then tcc_cc (the seed C compiler) assembled from its committed
+# sl64 seed. See vendor/README.md.
+M2=${SEEDDIR}/M2libc
+${S0}/M2-Planet --architecture ${ARCH} -f ${M2}/sys/types.h -f ${M2}/stddef.h -f ${M2}/${ARCH}/linux/fcntl.c -f ${M2}/fcntl.c -f ${M2}/${ARCH}/linux/unistd.c -f ${M2}/${ARCH}/linux/sys/stat.c -f ${M2}/ctype.c -f ${M2}/stdlib.c -f ${M2}/stdarg.h -f ${M2}/stdio.h -f ${M2}/stdio.c -f ${M2}/string.c -f ${M2}/bootstrappable.c -f ${MESR}/stack_c_${ARCH}.c --debug -o ${T}/stack_c.M1
+${S0}/blood-elf --64 --little-endian -f ${T}/stack_c.M1 -o ${T}/stack_c-footer.M1
+${S0}/M1 --architecture ${ARCH} --little-endian -f ${M2}/${ARCH}/${ARCH}_defs.M1 -f ${M2}/${ARCH}/libc-full.M1 -f ${T}/stack_c.M1 -f ${T}/stack_c-footer.M1 -o ${T}/stack_c.hex2
+${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/stack_c.hex2 -o ${STORE}/stack_c/bin/stack_c
+
+${STORE}/stack_c/bin/stack_c -i ${MESR}/stack_c_intro_${ARCH}.M1 ${MESR}/tcc_cc.${ARCH}.sl64 -o ${T}/tcc_cc.M1
+${S0}/blood-elf --64 --little-endian -f ${T}/tcc_cc.M1 -o ${T}/tcc_cc-footer.M1
+${S0}/M1 --architecture ${ARCH} --little-endian -f ${T}/tcc_cc.M1 -f ${T}/tcc_cc-footer.M1 -o ${T}/tcc_cc.hex2
+${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/tcc_cc.hex2 -o ${STORE}/tcc_cc/bin/tcc_cc
+
+# From here on tools are found by bare name: PATH is the seed prefixes, and
+# grows one store prefix per package below (the composition rule shpack keeps).
+PATH=${STORE}/mescc-tools-1.7.0/bin:${STORE}/mescc-tools-extra-1.4.0/bin:${STORE}/M2-Mesoplanet-1.13.0/bin:${STORE}/tcc_cc/bin:${STORE}/stack_c/bin
+
+# Verify self-hosting: tcc_cc rebuilds its own committed sl64 byte-for-byte
+# (sha256-pinned). This also covers stack_c, which assembled tcc_cc.
+kaem --verbose --strict --file ${BOOT}/check-tools.kaem
+
+# --- 3. the package chain -------------------------------------------------------
+# Per package: install prefix ${STORE}/<name-version>, one PATH prepend, one
+# child kaem running ${BOOT}/<name-version>/kaem.run. The scripts build in
+# ${TMPDIR}/build/<name-version> and reference their inputs absolutely:
+# ${DISTFILES} (tarballs, checked first thing against sources.sha256), ${PKG}
+# (the package's asset dir), ${SEEDDIR} (M2libc), ${MESR} (tcc_cc/stack_c
+# sources).
+
+# The libc's own store prefix. Expanded once here (not derived from any
+# package's PREFIX): tcc bakes LIBDIR/INCDIR in as its crt-prefix and
+# sysinclude path, and binutils/gcc later point their sysroot here.
+LIBC_PREFIX=${STORE}/musl-1.1.24
+LIBDIR=${STORE}/musl-1.1.24/lib
+INCDIR=${STORE}/musl-1.1.24/include
+
+# simple-patch: exact-match patcher, used until GNU patch exists.
+pkg=simple-patch-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# tcc 0.9.26: the seed-grown C compiler, plus the bring-up subset musl.
+pkg=tcc-0.9.26
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# Full musl 1.1.24, replacing the subset libc.a (float-correct strtod; must
+# precede tcc-0.9.27, which statically links the strtod of the libc it sees).
+pkg=musl-1.1.24
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# tcc 0.9.27: the production compiler for the rest of the bootstrap.
+pkg=tcc-0.9.27
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# Full musl 1.1.24, SECOND pass -- rebuilt by tcc-0.9.27 (now first on PATH).
+# The first musl pass (above) is compiled by tcc-0.9.26, whose float-LITERAL
+# folding uses the subset libc's glue strtod (constant-free but only a few ULP
+# accurate -- see musl-1.1.24/glue/float.c). That is fine for musl's own strtod
+# (bignum-based, correctly rounded regardless) but NOT for libm's compile-time
+# float constants: e.g. floor/ceil/round's `toint = 1/DBL_EPSILON` folds to
+# ~2^52 instead of exactly 2^52, so the `x+toint-toint-x` rounding identity
+# collapses and 72/230 libm objects (all of sin/cos/tan, exp/log/pow, gamma,
+# bessel, sqrt, rint, fma, floor/ceil/round, ...) come out subtly wrong. That
+# silently breaks downstream float-literal parsing (e.g. gawk int() -> 0, which
+# made GCC-16's opth-gen emit cl_optimization.explicit_mask[0] and cc1 wild-jump
+# to 0). tcc-0.9.27 links the first pass's correctly-rounded strtod, so this
+# pass re-folds every libm constant exactly. The chicken-and-egg (0.9.27 needs
+# full musl's strtod to link) forces the first pass to exist; this one heals it.
+pkg=musl-1.1.24
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# sandbox: the Landlock build-step launcher (project-original C, statically
+# linked with the just-built tcc+musl). The shell phase wraps every build with
+# it (see concretize.sh emit_dagmk), so it is built here as soon as tcc+musl
+# exist.
+pkg=sandbox-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# patch-shebangs: rewrites #!/bin/sh shebangs to the store shell so shell-phase
+# builds need no host /bin/sh. Built here for the same reason as sandbox -- as
+# soon as tcc+musl exist.
+pkg=patch-shebangs-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# tcc 0.9.27 + (float-healed) musl 1.1.24 are now in the store; what follows
+# builds with a real makefile.
+
+# make 3.82: first build tool; everything below builds with a real makefile.
+pkg=make-3.82
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# patch: every later package applies real unified diffs.
+pkg=patch-2.5.9
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=gzip-1.2.4
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=tar-1.12
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=sed-4.0.9
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=bzip2-1.0.8
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=coreutils-5.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# dash: the first shell, installed only in its store prefix (no /bin/sh; the
+# shell phase reaches it via CONFIG_SHELL). See dash-0.5.12/kaem.run.
+pkg=dash-0.5.12
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# --- 4. the shell phase ---------------------------------------------------------
+# The base is complete: PATH now holds every kaem-phase prefix (newest first)
+# over the seed prefixes -- exactly the PATH floor shpack composes build PATHs
+# on. Hand over to shpack on the store dash (there is no /bin/sh), with the
+# whole configuration in the environment: ROOT STORE DISTFILES BUILDDIR ARCH
+# BASEPATH [JOBS]. `shpack install gcc` by default; COMMAND=shell drops into
+# an interactive dash with shpack on hand (see shpack.conf.example).
+BASEPATH=${PATH}
+exec ${STORE}/dash-0.5.12/bin/sh ${ROOT}/shpack/bin/shpack ${COMMAND} ${SPEC}

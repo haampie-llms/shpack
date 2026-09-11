@@ -1,0 +1,27 @@
+# shpack.conf -- optional configuration of a bootstrap run. Copy this file to
+# ./shpack.conf and uncomment what you change; without it the defaults below
+# apply. The bootstrap driver (shpack/bootstrap/start.kaem) reads it after
+# setting the defaults and exports the result to every build and to shpack.
+#
+# Syntax: one KEY=VALUE per line, no quotes, no spaces around '=', '#' starts a
+# comment. ${ROOT} is the tree root (the directory above seed/, where the seed
+# was exec'd from). The file is valid both for kaem and for sh.
+
+# Where packages install: one immutable prefix per package under here. Store
+# prefixes are baked into the toolchain, so pick the final location.
+#STORE=${ROOT}/store
+
+# Source tarballs (fetched by ./fetch-distfiles.sh, or shipped with the tree).
+#DISTFILES=${ROOT}/distfiles
+
+# Scratch: kaem-phase builds, shpack's state and stage dirs, logs, HOME.
+#BUILDDIR=${ROOT}/tmp
+
+# Parallel package builds in the shell phase. Default: the number of online
+# CPUs. The kaem phase is serial regardless.
+#JOBS=8
+
+# What to run once the base is built: `shpack COMMAND SPEC` on the store dash.
+# COMMAND=shell instead drops into an interactive dash with `shpack` on hand.
+#COMMAND=install
+#SPEC=gcc

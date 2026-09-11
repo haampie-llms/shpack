@@ -1,19 +1,24 @@
-#!/bin/sh
-
-set +x
-
-# Seed tools live in their /opt prefixes; find them by bare name on PATH.
-PATH=@SEED_PATH@
-
-# Self-hosting / reproducibility check: rebuild tcc_cc's own sl64 with the
-# running tcc_cc and require it to be byte-identical to the committed seed
-# vendor/mes-replacement/tcc_cc.@ARCH@.sl64. We pin that seed's sha256 -- the live-bootstrap
-# reproducibility idiom -- and verify it with the stage0 sha256sum, so no
-# bespoke file comparator (the old `equal`) has to be built here. Because
-# /opt/tcc_cc was itself assembled by stack_c from this same committed sl64, a
+#!/kaem --verbose --strict
+# SPDX-License-Identifier: MIT
+#
+# Self-hosting / reproducibility check, run by start.kaem as a child kaem (so
+# the cd's stay local) once the seed tools are on PATH: rebuild tcc_cc's own
+# sl64 with the running tcc_cc and require it to be byte-identical to the
+# committed seed vendor/mes-replacement/tcc_cc.<arch>.sl64. We pin that seed's
+# sha256 -- the live-bootstrap reproducibility idiom -- and verify it with the
+# stage0 sha256sum, so no bespoke file comparator has to be built here. Because
+# tcc_cc was itself assembled by stack_c from this same committed sl64, a
 # byte-exact reproduction also transitively exercises stack_c.
-# CWD is the seed tree (/tmp/seed); the sources are under ./src and the sha256
-# pin under ./@ARCH@, so step into src and reach the pin via ../@ARCH@.
-cd src
-tcc_cc @TCC_ARCH_FLAG@ -o @BUILDDIR@/tcc_cc.sl64 stdlib.c tcc_cc.c
-sha256sum -c ../@ARCH@/tcc_cc.sl64.sha256
+#
+# Compile from inside the source dir with bare file names (the arguments are
+# part of what gets reproduced), write into ${T}, and check there: the pin
+# lists a bare tcc_cc.sl64.
+cd ${MESR}
+if match ${ARCH} amd64; then
+    tcc_cc -64 -o ${T}/tcc_cc.sl64 stdlib.c tcc_cc.c
+fi
+if match ${ARCH} aarch64; then
+    tcc_cc -a aarch64 -o ${T}/tcc_cc.sl64 stdlib.c tcc_cc.c
+fi
+cd ${T}
+sha256sum -c ${MESR}/tcc_cc.${ARCH}.sl64.sha256

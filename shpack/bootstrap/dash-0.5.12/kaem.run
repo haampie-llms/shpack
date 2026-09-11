@@ -20,6 +20,7 @@
 # then copy builtins.{c,h,def} init.c nodes.{c,h} signames.c syntax.{c,h}
 # token.h token_vars.h into files/.
 
+cd ${DISTFILES}
 sha256sum -c ${PKG}/sources.sha256
 
 BLD=${TMPDIR}/build/${pkg}

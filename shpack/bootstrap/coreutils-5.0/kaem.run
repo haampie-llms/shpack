@@ -15,11 +15,12 @@
 # patches/getline-glibc-guard.patch is project-original: lib/getline.c guards its prototypes with a glibc check that
 # misfires under musl.
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
-
-sha256sum -c ${PKG}/sources.sha256
 
 cp ${DISTFILES}/${pkg}.tar.bz2 ${pkg}.tar.bz2
 bunzip2 -f ${pkg}.tar.bz2

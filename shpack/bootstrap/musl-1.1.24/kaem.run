@@ -25,8 +25,6 @@
 MSRC=${PKG}
 SP=${MSRC}/simple-patches
 
-sha256sum -c ${PKG}/sources.sha256
-
 # amd64 + aarch64 only; MUSL_INC is musl's in-tree arch/<dir> name.
 BUILD_MUSL=False
 if match ${ARCH} amd64; then
@@ -40,6 +38,9 @@ fi
 
 if match ${BUILD_MUSL} True; then
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
@@ -52,12 +53,15 @@ kaem --file ${MSRC}/${ARCH}/apply-full.kaem
 
 # Point musl's system()/popen() at the store dash: the sandbox grants no host
 # /bin/sh, so musl-linked tools that popen (gawk@3.0.4's `print | "cmd"`) must
-# reach the store shell. The .after fragments carry @STORE@, baked by stage.sh.
-# Bootstrap-only libc, never relocated, so absolute is fine. packages/musl does
-# the same for 1.2.5; the deliverable glibc keeps /bin/sh.
+# reach the store shell. The committed .after fragments carry a @STORE@ token;
+# instantiate them with the real store path (mescc-tools-extra replace) before
+# patching. Bootstrap-only libc, never relocated, so absolute is fine.
+# packages/musl does the same for 1.2.5; the deliverable glibc keeps /bin/sh.
 SS=${MSRC}/shpack-shell
-simple-patch src/process/system.c ${SS}/system.c.before ${SS}/system.c.after
-simple-patch src/stdio/popen.c ${SS}/popen.c.before ${SS}/popen.c.after
+replace --file ${SS}/system.c.after --output ${TMPDIR}/system.c.after --match-on @STORE@ --replace-with ${STORE}
+replace --file ${SS}/popen.c.after --output ${TMPDIR}/popen.c.after --match-on @STORE@ --replace-with ${STORE}
+simple-patch src/process/system.c ${SS}/system.c.before ${TMPDIR}/system.c.after
+simple-patch src/stdio/popen.c ${SS}/popen.c.before ${TMPDIR}/popen.c.after
 mkdir -p obj/include/bits
 mkdir -p obj/src/internal
 cp ${MSRC}/${ARCH}/generated/bits/alltypes.h obj/include/bits/alltypes.h

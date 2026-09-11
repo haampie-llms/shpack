@@ -10,11 +10,12 @@
 # alloca shim is built from the compat set.
 # First package extracted with our own tar(1).
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
-
-sha256sum -c ${PKG}/sources.sha256
 
 cp ${DISTFILES}/${pkg}.tar.gz ${pkg}.tar.gz
 gzip -d -f ${pkg}.tar.gz

@@ -17,7 +17,8 @@
 # resolve SPECSTR -- pick the node for "name" or "name@version".
 # Candidates come from the recipe's declared versions and from the externals
 # table (etc/externals: "name@version prefix" lines, the packages the kaem
-# phase already installed). Selection is first-match-wins: the newest version
+# phase already installed; a relative prefix is under $STORE). Selection is
+# first-match-wins: the newest version
 # is simply the one declared first. Recipe versions have priority -- a recipe
 # is the real definition, so for a bare name it always beats an external; the
 # externals table is the fallback for names with no recipe (tcc, dash) and for
@@ -49,6 +50,10 @@ resolve() {
             if [ "${ename%%@*}" != "$name" ]; then continue; fi
             v=${ename#*@}
             if [ -n "$want" ] && [ "$v" != "$want" ]; then continue; fi
+            case $eprefix in
+                /*) ;;
+                *) eprefix=$STORE/$eprefix ;;
+            esac
             best=$v bestkind=external bestprefix=$eprefix
             break
         done < "$EXTERNALS"
@@ -201,9 +206,6 @@ emit_dagmk() {
             printf 'SHPACK := %s\n' "$SHPACK_ROOT"
             printf 'REPO := %s\n' "$REPO"
             printf 'DISTFILES := %s\n' "$DISTFILES"
-            # etc dir each build-one re-sources: the staged base, distinct from
-            # $SHPACK_ROOT (live bin/lib/packages), so its own read grant.
-            printf 'ETC := %s\n' "${CONFIG%/*}"
             printf 'V := %s\n' "$VAR"
         fi
         printf '\n'
@@ -236,7 +238,7 @@ emit_dagmk() {
             pre= wrap=
             if [ -n "$SANDBOX" ]; then
                 pre="mkdir -p $prefix; "
-                wrap="\$(SANDBOX) --read \$(STORE) --read \$(SHPACK) --read \$(REPO) --read \$(DISTFILES) --read \$(ETC) --write \$(V) --write $prefix -- "
+                wrap="\$(SANDBOX) --read \$(STORE) --read \$(SHPACK) --read \$(REPO) --read \$(DISTFILES) --write \$(V) --write $prefix -- "
             fi
             printf '\t+@%sPATH=%s$(BASEPATH) \\\n' "$pre" "$(compose_path "$id")"
             printf '\t  %s$(SHELL) %s/bin/shpack build-one %s >$(L)/%s.log 2>&1 \\\n' \

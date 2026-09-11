@@ -1,19 +1,13 @@
-# chroot build tree produced by build.sh
-/rootfs/
-
-# relocatable store produced by build-host.sh (chroot-free bootstrap)
+# Outputs of a bootstrap run, at their default locations (see shpack.conf.example)
 /store/
-
-# build logs
-/logs/
+/tmp/
 
 # source tarballs: not committed (too large); fetched + verified by
-# fetch-distfiles.sh, which carries the sha256/url manifest.
+# fetch-distfiles.sh, or shipped with the tree.
 /distfiles/
 
-# local reference checkouts (clean clones; not used by the build --
-# build.sh uses vendor/stage0-posix/M2libc, and GNU Mes is replaced by
-# vendor/mes-replacement/tcc_cc.c)
-/M2libc/
-/mes/
-/live-bootstrap/
+# local configuration (copy shpack.conf.example)
+/shpack.conf
+
+# stage0-posix's own build outputs under seed/ are covered by the .gitignore
+# files it ships (seed/*/bin, seed/*/artifact).

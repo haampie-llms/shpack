@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT
+#
+# Read by the interactive store dash that `shpack shell` execs (via $ENV).
+# There is no `shpack` executable on PATH -- the driver is bin/shpack, run
+# explicitly on the store shell -- so give the session a function of that name.
+shpack() {
+    "$CONFIG_SHELL" "$SHPACK_ROOT/bin/shpack" "$@"
+}
+PS1='shpack$ '

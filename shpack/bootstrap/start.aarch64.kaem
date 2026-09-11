@@ -1,0 +1,7 @@
+#!/kaem --verbose --strict
+# SPDX-License-Identifier: MIT
+# aarch64 entry of the shpack driver: exec'd by seed/after.kaem with an empty
+# environment, so the arch identity is restated here. See start.kaem.
+ARCH=aarch64
+ARCH_DIR=AArch64
+include ../shpack/bootstrap/start.kaem

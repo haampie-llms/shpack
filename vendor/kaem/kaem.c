@@ -15,6 +15,13 @@
  * sha256). Compiled by M2-Planet in the stage0 bootstrap, so it stays within
  * that C subset (file-scope globals, calloc, structs, plain control flow).
  *
+ * shpack additions (see seed/after.kaem for how this kaem is built and
+ * shpack/bootstrap/start.kaem for how they are used): PWD is set from
+ * getcwd() at startup and refreshed by cd, so a script can derive absolute
+ * paths from its launch directory (ROOT=${PWD}); `include FILE` and
+ * `include-optional FILE` run another script's lines in this process, so a
+ * KEY=VALUE configuration file becomes kaem variables.
+ *
  * mescc-tools is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -715,6 +722,53 @@ void add_alias()
 	n->value = newvalue;
 }
 
+/* env_set NAME VALUE -- set (or add) an environment variable from C, the way
+ * an assignment line does (shpack addition; add_envar parses a token). */
+void env_set(char* name, char* value)
+{
+	struct Token* n;
+
+	/* In init-mode the first variable finds env == NULL, rectify */
+	if(env == NULL)
+	{
+		env = calloc(1, sizeof(struct Token));
+		require(env != NULL, "Memory initialization of env failed\n");
+		env->var = name;
+	}
+
+	n = env;
+
+	/* Find match if possible */
+	while(!match(name, n->var))
+	{
+		if(NULL == n->next)
+		{
+			n->next = calloc(1, sizeof(struct Token));
+			require(n->next != NULL, "Memory initialization of next env node in env_set failed\n");
+			n->next->var = name;
+		} /* Loop will match and exit */
+
+		n = n->next;
+	}
+
+	n->value = value;
+
+	/* The environment changed: invalidate the cached envp array. */
+	env_dirty = TRUE;
+}
+
+/* set_pwd -- PWD = getcwd(), like sh does (shpack addition). Called at startup
+ * when PWD is unset and after every successful cd, so a script can derive
+ * absolute paths from its launch directory (shpack: ROOT=${PWD}). */
+void set_pwd()
+{
+	char* path = calloc(MAX_STRING, sizeof(char));
+	require(path != NULL, "Memory initialization of path in set_pwd failed\n");
+	getcwd(path, MAX_STRING);
+	require(!match("", path), "getcwd() failed\n");
+	env_set("PWD", path);
+}
+
 /* cd builtin */
 int cd()
 {
@@ -737,6 +791,7 @@ int cd()
 		return FAILURE;
 	}
 
+	set_pwd();
 	return SUCCESS;
 }
 
@@ -909,6 +964,51 @@ void unset()
 void execute(FILE* script, char** argv);
 int _execute(FILE* script, char** argv);
 int collect_command(FILE* script, char** argv);
+void run_script(FILE* script, char** argv);
+
+/* include builtin (shpack addition): run FILE's lines in this kaem, so its
+ * variable assignments persist -- a KEY=VALUE configuration file becomes kaem
+ * variables (and the same file is valid sh). With optional set, a missing
+ * file is a no-op instead of an error. Not for use inside an if block: the
+ * if/fi scanner reads the token list, which the included script overwrites. */
+int include_cmd(char** argv, int optional)
+{
+	FILE* f;
+
+	if(NULL == token->next)
+	{
+		return FAILURE;
+	}
+
+	token = token->next;
+
+	if(NULL == token->value)
+	{
+		return FAILURE;
+	}
+
+	f = fopen(token->value, "r");
+
+	if(NULL == f)
+	{
+		if(optional)
+		{
+			fputs("include-optional: no ", stdout);
+			fputs(token->value, stdout);
+			fputs(", using defaults\n", stdout);
+			return SUCCESS;
+		}
+
+		fputs("include: cannot open ", stderr);
+		fputs(token->value, stderr);
+		fputs("\n", stderr);
+		return FAILURE;
+	}
+
+	run_script(f, argv);
+	fclose(f);
+	return SUCCESS;
+}
 
 /* if builtin */
 void if_cmd(FILE* script, char** argv)
@@ -1090,6 +1190,28 @@ int _execute(FILE* script, char** argv)
 	{
 		token = token->next; /* Skip the actual exec */
 		exec = TRUE;
+	}
+	else if(match(token->value, "include"))
+	{
+		rc = include_cmd(argv, FALSE);
+
+		if(STRICT)
+		{
+			require(rc == SUCCESS, "include failed!\n");
+		}
+
+		return 0;
+	}
+	else if(match(token->value, "include-optional"))
+	{
+		rc = include_cmd(argv, TRUE);
+
+		if(STRICT)
+		{
+			require(rc == SUCCESS, "include-optional failed!\n");
+		}
+
+		return 0;
 	}
 	else if(match(token->value, "if"))
 	{
@@ -1542,6 +1664,12 @@ int main(int argc, char** argv, char** envp)
 	if(INIT_MODE == FALSE)
 	{
 		populate_env(envp);
+	}
+
+	/* make sure PWD is set (shpack addition; like sh) */
+	if(NULL == env_lookup("PWD"))
+	{
+		set_pwd();
 	}
 
 	/* make sure SHELL is set */

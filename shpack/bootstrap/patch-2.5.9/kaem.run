@@ -9,11 +9,12 @@
 # and an empty patchlevel.h suffice, the rest is plain C. The vendored
 # makefile (mk/main.mk) is a third-party (live-bootstrap, GPL) input.
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
-
-sha256sum -c ${PKG}/sources.sha256
 
 ungz --file ${DISTFILES}/${pkg}.tar.gz --output ${pkg}.tar
 untar --non-strict --file ${pkg}.tar

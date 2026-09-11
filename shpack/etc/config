@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+#
+# Settings derived from the shpack environment. The locations themselves --
+# ROOT, STORE, DISTFILES, BUILDDIR, ARCH, BASEPATH and optionally JOBS -- are
+# environment variables: the kaem driver (bootstrap/start.kaem) exports them
+# after reading shpack.conf, and the test fixture exports them directly. What
+# is here follows from $STORE, and each line yields to a value already in the
+# environment (the tests set SANDBOX= and PATCH_SHEBANGS= to build
+# unsandboxed). Plain POSIX shell, sourced by bin/shpack.
+
+# The tcc/musl bootstrap dash, used ONLY as the dag.mk driver-make shell (the
+# top make that runs `shpack build-one` per node). It exists from the first kaem
+# package on. Per-build shells are not taken from here: every built recipe
+# declares its own dash dep and the builder's $sh follows it -- `depends_on dash`
+# for the clean glibc dash, `depends_on dash@0.5.12` for this bootstrap one (an
+# external). There is no /bin/sh anywhere, so this is an absolute store path.
+CONFIG_SHELL=${CONFIG_SHELL:-$STORE/dash-0.5.12/bin/sh}
+
+# When this spec occurs in a DAG, shpack builds it first, serially, under the
+# bootstrap-era make (3.82, whose -j has races), then schedules the rest -jN
+# under it.
+SHPACK_BOOTSTRAP_MAKE=${SHPACK_BOOTSTRAP_MAKE-gmake@4.4.1}
+
+# The Landlock launcher each build step is wrapped in (kaem phase, built right
+# after tcc+musl). Confines a build to the store (read+exec), the recipe tree
+# and distfiles (read), and its own prefix plus scratch (write), so the host
+# /usr is invisible and stray writes are denied. Empty builds unsandboxed.
+SANDBOX=${SANDBOX-$STORE/sandbox-1.0/bin/sandbox}
+
+# Rewrites `#!/bin/sh` shebangs in each unpacked source to the recipe's build
+# shell ($sh, its declared dash) before building, since the sandbox has no host
+# /bin/sh for install-sh/config.guess and friends. Empty skips it.
+PATCH_SHEBANGS=${PATCH_SHEBANGS-$STORE/patch-shebangs-1.0/bin/patch-shebangs}

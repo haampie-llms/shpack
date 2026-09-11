@@ -1,6 +1,6 @@
 # shpack
 
-`shpack` is a fast, bootstrappable package manager for Linux. It is capable of building a complete modern compiler toolchain (GCC 16, glibc 2.43, binutils 2.46) from sources, starting from a few hundred bytes of trusted machine code (from [stage0-posix][3]). The first C/C++ compiler, GCC 4.7, comes up in about **2 minutes 30 seconds**, and the full dynamically linked toolchain finishes in **15 to 30 minutes**[^fast][^bench] total. It runs rootless and the default launcher does not require user namespaces.
+`shpack` is a fast, bootstrappable package manager for Linux. It is capable of building a complete modern compiler toolchain (GCC 16, glibc 2.43, binutils 2.46) from sources, starting from a few hundred bytes of trusted machine code (from [stage0-posix][3]). The first C/C++ compiler, GCC 4.7, comes up in about **2 minutes 30 seconds**, and the full dynamically linked toolchain finishes in **15 to 30 minutes**[^fast][^bench] total. It runs rootless, needs no user namespaces, and the whole kickoff is a single `exec` of the stage0 seed: no shell, coreutils, `sudo` or `chroot` on the host.
 
 The build itself trusts only a single binary seed. Everything else is compiled from checksummed sources. It bootstraps a basic shell first, then increasingly capable C compilers and libraries, and finally the complete toolchain using a new bootstrapping path where the TinyCC C compiler with musl libc is built straight out of stage0-posix via [MES replacement][1]. It targets `x86_64` and `AArch64` natively from the start, which matters on modern systems where 32-bit support (x86, arm32) may be disabled in the kernel or missing from the CPU (e.g. Apple Silicon).
 
@@ -10,78 +10,72 @@ The build itself trusts only a single binary seed. Everything else is compiled f
 
 ### Setup
 
-Clone the repository and download the package sources once:
+Clone the repository (stage0-posix is vendored, no submodules) and download the
+package sources once:
 
 ```sh
-git clone --recursive --depth=1 https://github.com/haampie/shpack.git
+git clone --depth=1 https://github.com/haampie/shpack.git
 cd shpack
-./fetch-distfiles.sh     # download the sources of every package
+./fetch-distfiles.sh     # download the sources of every package into distfiles/
 ```
 
-### Two ways to run
+### Run
 
-There are two launchers. Both provision the bootstrap base once (the stage0 seed up
-through `dash`) and then drive `shpack` like any package manager. Pass a command to
-run it directly, `sh` to drop into a shell with `shpack` on `PATH`, or nothing at all
-(the default is `shpack install gcc`).
+The whole bootstrap is one `exec` of the stage0 seed from inside `seed/`:
 
-#### `run-local.sh`
+```sh
+cd seed && exec bootstrap-seeds/POSIX/AMD64/kaem-optional-seed kaem.amd64    # or AArch64 / kaem.aarch64
+```
 
-`run-local.sh` builds directly on the host, without a chroot. This method should
-work almost everywhere as it doesn't require user namespaces. It install into a local
-`./store` (or any dir specified by `--store DIR`):
+That is the complete contract: a directory tree and the kernel. The seed grows the
+stage0 tools, `seed/after.kaem` builds shpack's `kaem`, and
+`shpack/bootstrap/start.kaem` derives every path from where the tree is, reads
+`./shpack.conf`, builds the kaem-phase base (up through `dash`) into `./store` and
+execs `shpack install gcc` on the store shell. Two convenience wrappers spell that
+line out for you:
+
+- `./run-local.sh [--arch amd64|aarch64]` -- runs it as-is on the host.
+- `./run-rootfs.sh [--arch ...]` -- runs it inside a rootless `bwrap`[^bwrap]
+  namespace that contains nothing but this tree, `/dev` and `/proc`. Needs
+  unprivileged user namespaces (Debian and Ubuntu restrict them; enable with
+  `sudo sysctl -w kernel.unprivileged_userns_clone=1` on Debian,
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` on Ubuntu 24.04+).
+  Since the tree is bound at its own path, the store it produces should be
+  byte-identical to a host run's: that is what it is for.
 
 ```console
-$ ./run-local.sh shpack install gcc
+$ ./run-local.sh
 ...
 [+] a062f54 gcc@16.1.0 /home/you/shpack/store/gcc-16.1.0-a062f54
-```
-
-and the installed compiler can be used directly without chroot:
-
-```console
-$ /home/you/shpack/store/gcc-16.1.0-a062f54/bin/g++ hello.cc -o hello
-$ ./hello
+$ store/gcc-16.1.0-a062f54/bin/g++ hello.cc -o hello && ./hello
 hello world
 ```
 
-Building without chroot might sound "nonreproducible", but builds are confined by a
-[Linux Landlock][7] sandbox regardless of launcher, which itself is bootstrapped
-early on, and packages bootstrapped prior to that do not use system file paths.
-See [Sandboxing](#sandboxing) for more information.
+Building without a chroot might sound "nonreproducible", but every package build
+is confined by a [Linux Landlock][7] sandbox, itself bootstrapped early on, and
+the packages built before it exist do not use system paths.
+See [Sandboxing](#sandboxing).
 
-#### `run-rootfs.sh`
+### Configuration
 
-`run-rootfs.sh` builds inside a changed root. It currently depends on
-`bwrap`[^bwrap], for bind mounting in and change of root to `rootfs/`.  It is
-more hermetic, but needs (unprivileged) user namespaces. It installs packages
-to `/opt` inside the rootfs:
-
-```console
-$ ./run-rootfs.sh shpack install gcc
-...
-[+] a062f54 gcc@16.1.0 /opt/gcc-16.1.0-a062f54
-```
-
-User namespaces are enabled by default on most distributions, but Debian and
-Ubuntu restrict them. If `run-rootfs.sh` fails with a permission error, either
-use `run-local.sh` (which needs no namespaces) or enable them:
-
-```sh
-sudo sysctl -w kernel.unprivileged_userns_clone=1  # Debian
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0  # Ubuntu 24.04+
-```
+Everything configurable lives in `./shpack.conf` (copy `shpack.conf.example`):
+`STORE`, `DISTFILES`, `BUILDDIR`, `JOBS`, and what to run once the base is
+built (`COMMAND`/`SPEC`, default `install gcc`). It is a plain `KEY=VALUE` file
+that both `kaem` and `sh` read; `${ROOT}` is the tree root. No environment
+variables are involved on the host side.
 
 ### Running interactively
 
-Both `./run-local.sh CMD...` and `./run-rootfs.sh CMD...` execute the given command
-after the shell is bootstrapped, which means you can use `shpack` interactively by
-dropping in the just-built shell:
+`COMMAND=shell` in `shpack.conf` drops you into the bootstrapped `dash` once the
+base is built, with the store on `PATH` and `shpack` available by name:
 
 ```sh
-./run-local.sh sh    # drops you in bootstrapped dash
-$ shpack install xz  # shpack is in PATH
+shpack$ shpack install xz
 ```
+
+Re-running the bootstrap rebuilds the kaem-phase base (a few minutes) and then
+only what the store lacks: installed prefixes are never rebuilt. One run at a
+time -- store and state are shared on disk.
 
 ### What `shpack install gcc` resolves
 
@@ -127,7 +121,7 @@ d18a43d        zstd@1.5.7-boot
 ```
 
 The `(external)` nodes are part of the initial bootstrapping phase. All installed
-packages are put into unique prefixes `/opt/<name>-<version>[-<hash>]`.
+packages are put into unique prefixes `$STORE/<name>-<version>[-<hash>]`.
 
 ### `shpack install spack`
 
@@ -139,7 +133,7 @@ store prefix.
 
 ## Scope and trust
 
-By design, `shpack` bootstraps *on top of a running Linux*: the build does syscalls (`execve` and friends), so it depends on the kernel's ABI, and getting it started leans on the ordinary userland (a shell, `sed`, coreutils) the launcher uses to stage and kick off the bootstrap. This is a deliberate scope, not full bare-metal trustlessness -- for that you would boot into the bootstrap and run it directly on hardware. What `shpack` aims for instead is reproducibility: the same seed and sources should yield the same toolchain across different Linux machines, so a [Thompson-style][6] compromise would have to be present on *every* host you compare to go unnoticed. `shpack` also trusts the generated files that upstream ships in release tarballs, including `configure` scripts and pre-generated source files. live-bootstrap takes the stricter path and rebuilds those artifacts too; `shpack` makes the other tradeoff deliberately, optimizing for a modern, real-world toolchain that bootstraps quickly and keeping the dependency set small -- regenerating those artifacts would otherwise pull flex, bison, autotools and texinfo into the chain.
+By design, `shpack` bootstraps *on top of a running Linux*: the build does syscalls (`execve` and friends), so it depends on the kernel's ABI, and on whatever `exec`s the seed with the tree as its working directory (a shell, an init, a script -- nothing of it is used afterwards). This is a deliberate scope, not full bare-metal trustlessness -- for that you would boot into the bootstrap and run it directly on hardware. What `shpack` aims for instead is reproducibility: the same seed and sources should yield the same toolchain across different Linux machines, so a [Thompson-style][6] compromise would have to be present on *every* host you compare to go unnoticed. `shpack` also trusts the generated files that upstream ships in release tarballs, including `configure` scripts and pre-generated source files. live-bootstrap takes the stricter path and rebuilds those artifacts too; `shpack` makes the other tradeoff deliberately, optimizing for a modern, real-world toolchain that bootstraps quickly and keeping the dependency set small -- regenerating those artifacts would otherwise pull flex, bison, autotools and texinfo into the chain.
 
 ---
 
@@ -151,6 +145,22 @@ simple dependency resolver emits a `Makefile`, so independent packages build in
 parallel under a single `make` jobserver.
 
 Paths in this section are relative to [shpack/](shpack/).
+
+## Kickoff
+
+Before any shell exists the bootstrap is driven by `kaem`, stage0-posix's
+minimal script runner. `seed/` is a vendored copy of stage0-posix; its seed
+scripts are cwd-relative and the seed interpreters have no `cd`, which is why
+the exec happens from inside `seed/`. Once stage0 has built the mescc-tools it
+execs `seed/after.kaem` (ours), which compiles shpack's `kaem`
+([vendor/kaem](vendor/kaem): upstream's plus a `PWD` that tracks `getcwd`, an
+`include` builtin and a no-malloc-per-command optimization) and execs it with an
+empty environment on `bootstrap/start.kaem`. That driver does `cd ..`,
+`ROOT=${PWD}`, sets the defaults, `include`s `shpack.conf`, and runs the fixed
+kaem-phase package chain -- one child kaem per `bootstrap/<name-version>/kaem.run`,
+one store prefix each, one `PATH` prepend each. Nothing is computed on the host
+and no file is generated: the configuration reaches every build and `shpack`
+itself as environment variables exported by kaem.
 
 ## Recipes
 
@@ -212,8 +222,9 @@ binary of the same name must call `command install`.
 
 ## Concretization and store
 
-`shpack install <name>` resolves names to concrete versions (newest wins;
-`name@version` pins; the externals table wins ties), walks `depends_on` into a
+`shpack install <name>` resolves names to concrete versions (the first version
+a recipe declares wins; `name@version` pins; the externals table is the fallback
+for names without a recipe), walks `depends_on` into a
 DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
 auxiliary files, source checksums, target arch, and the hashes of all direct
 dependencies. Anything changing anywhere in a package's closure changes its
@@ -223,7 +234,7 @@ Every package installs into its own prefix `$STORE/<name>-<version>-<hash7>`,
 with metadata in `.shpack/` (spec, dep edges, the hash manifest, the recipe, the
 build log) -- what a future `spack reindex` needs to reconstruct concrete specs
 from the store. Packages the kaem phase already installed (unhashed
-`/opt/<name>-<version>` prefixes) are registered in `etc/externals`,
+`$STORE/<name>-<version>` prefixes) are registered in `etc/externals`,
 Spack-`packages.yaml`-style; they resolve like any other candidate and
 contribute their identity to dependents' hashes.
 
@@ -249,46 +260,47 @@ shpack env <name|id>         print a node's composed environment
 shpack find                  list concretized/installed packages
 ```
 
-State lives under `$SHPACK_VAR` (default `/tmp/shpack`): `spec/<id>/` node dirs,
+State lives under `$SHPACK_VAR` (default `$BUILDDIR/shpack`): `spec/<id>/` node dirs,
 `topo`, `index`, `dag.mk`, `stamps/`, `logs/`, `stage/`. The store itself is the
 only persistent output; `build-one` short-circuits when a node's prefix already
 carries `.shpack/spec`.
 
 ## Sandboxing
 
-The launcher choice (host vs. chroot) is orthogonal to per-build isolation: both
-launchers sandbox every build the same way. Every individual package build is
-wrapped in a **Landlock sandbox** that restricts filesystem access to just that
-build's declared inputs and its output prefix. That sandbox is a tiny
-self-contained C program (`sandbox-1.0`) bootstrapped early in the chain -- right
-after `tcc`+`musl` -- so it covers the entire shell phase. There is no `/bin/sh`
-anywhere: the `shpack` wrapper and every build invoke the store `dash`
-explicitly, so the host shell is never picked up.
+Whether or not the tree runs in a changed root is orthogonal to per-build
+isolation. Every individual package build is wrapped in a **Landlock sandbox**
+that restricts filesystem access to just that build's declared inputs and its
+output prefix. That sandbox is a tiny self-contained C program (`sandbox-1.0`)
+bootstrapped early in the chain -- right after `tcc`+`musl` -- so it covers the
+entire shell phase. There is no `/bin/sh` anywhere: `shpack` and every build
+invoke the store `dash` explicitly, so a host shell is never picked up.
 
-This is what makes `run-local.sh` safe to run directly on the host: even with no
-chroot, a build cannot read or write outside its declared inputs and output
-prefix. `run-rootfs.sh` adds a change of root on top, hiding the host `/usr`
-entirely, but the per-build confinement is identical either way.
+This is what makes running directly on the host safe: even with no chroot, a
+build cannot read or write outside its declared inputs and output prefix.
+`run-rootfs.sh` adds a change of root on top, hiding the host `/usr` entirely,
+but the per-build confinement is identical either way.
 
 ## Tool budget
 
 shpack core runs under the first bootstrap shell: dash 0.5.12, coreutils 5.0,
 sed 4.0.9, make 3.82, and the stage0 `sha256sum`. There is no grep, awk, find,
 xargs or mktemp at that point, and `expr`/`cut`/`tac` are avoided to keep the
-budget small; `tests/t-lint.sh` enforces this. Configuration (`etc/config`:
-ARCH, JOBS, STORE, DISTFILES, BASEPATH) is substituted on the host by the
-launchers (`stage.sh`) when staging -- there is no in-chroot configurator.
+budget small; `tests/t-lint.sh` enforces this. Configuration is the
+environment: the kaem driver exports `ROOT`, `STORE`, `DISTFILES`, `BUILDDIR`,
+`ARCH`, `BASEPATH` (its final `PATH`) and optionally `JOBS`; `etc/config` only
+derives the rest (`CONFIG_SHELL`, `SANDBOX`, ...) from `$STORE`.
 
 ## Tests
 
-`tests/run.sh` runs the suite on the host under dash: version comparison,
-resolution/concretization, Merkle-hash propagation, end-to-end installs of toy
-packages (real tarballs, patches, all three build systems, two-stage make
-bring-up), and the tool-budget lint. No chroot required.
+`tests/run.sh` runs the suite on the host under dash: resolution and
+concretization, Merkle-hash propagation, end-to-end installs of toy packages
+(real tarballs, patches, all three build systems, two-stage make bring-up), and
+the tool-budget lint. The fixture exports the same variables the kaem driver
+would. No chroot required.
 
 [^fast]: 14 minutes 9 seconds on an Intel Core Ultra 9 285 from 2025.
 [^bench]: 28-29 minutes on an 8-core AMD Ryzen 7 3700X from 2019.
-[^bwrap]: `bwrap` is used for convenience today (only by `run-rootfs.sh`); this may be replaced with a simpler `chroot`/`unshare`-based sandbox later.
+[^bwrap]: `bwrap` is used for convenience (only by `run-rootfs.sh`); this may be replaced with a simpler `unshare`-based wrapper later.
 
 [1]: https://github.com/FransFaase/MES-replacement
 [2]: https://github.com/fosslinux/live-bootstrap

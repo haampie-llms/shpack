@@ -41,14 +41,25 @@ slower than dash. This copy reuses per-command token/string pools, caches the
 envp array, and stops copying argv, driving per-command `brk` toward 0. It also
 raises `MAX_ARRAY` to 4096 (musl's full-libc `ar` line lists ~1260 objects in
 one command, and `tcc -ar` can't split). Output is byte-identical, gated on the
-musl `libc.a` sha256. Staging (`stage.sh`) drops these files over the staged
-submodule copy (`mescc-tools/Kaem/`), which stays pristine. Still compiled by M2-Planet,
-so it stays within that C subset. See the header comment in `kaem.c`.
+musl `libc.a` sha256. Two shpack additions on top: `PWD` is set from `getcwd()`
+at startup and refreshed by `cd` (so the bootstrap driver can locate the tree
+with `ROOT=${PWD}`), and `include FILE` / `include-optional FILE` run another
+script's lines in-process (how `shpack.conf` becomes kaem variables). Only the
+files that differ from upstream live here (`kaem.c`, `kaem.h`, `variable.c`);
+`seed/after.kaem` compiles them with M2-Planet next to upstream's
+`kaem_globals.{c,h}` and `M2libc/bootstrappable.h`, so the vendored stage0 tree
+is never modified. Still within the M2-Planet C subset. See the header comment
+in `kaem.c`.
 
-## `stage0-posix/`
+## `../seed/`
 
-Submodule, [oriansj/stage0-posix](https://github.com/oriansj/stage0-posix) at
-Release_1.9.1. The upstream binary seeds and the hex0/M1/M2 bring-up chain
-(mescc-tools, M2-Planet, M2-Mesoplanet, M2libc). Pristine — local
-modifications are layered on at stage time by `stage.sh`, never committed into
-the submodule.
+A plain copy of [oriansj/stage0-posix](https://github.com/oriansj/stage0-posix)
+at Release_1.9.1 (the tag and every nested submodule's commit are recorded in
+`seed/UPSTREAM`), committed into this repository so a checkout is runnable as-is:
+the upstream binary seeds (`bootstrap-seeds/POSIX/{AMD64,AArch64}`) and the
+hex0/M1/M2 bring-up chain (`AMD64/`, `AArch64/`, `mescc-tools`, `mescc-tools-extra`,
+`M2-Planet`, `M2-Mesoplanet`, `M2libc`; the other arches and test suites are
+left out). Pristine except for `seed/after.kaem`, the hook stage0-posix execs
+when it is done, which is ours. Its scripts are cwd-relative and the seed
+interpreters have no `cd`, which is why the bootstrap is exec'd from inside
+`seed/`. Updating it is a manual re-copy at a new tag plus a new `UPSTREAM`.

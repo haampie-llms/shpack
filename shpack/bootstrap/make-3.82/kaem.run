@@ -18,11 +18,12 @@
 # MAKE_JOBSERVER + HAVE_WAITPID/HAVE_SYS_WAIT_H enable the recursive -j
 # jobserver (without it every sub-make runs serial -- gcc would crawl).
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
-
-sha256sum -c ${PKG}/sources.sha256
 
 unbz2 --file ${DISTFILES}/${pkg}.tar.bz2 --output ${pkg}.tar
 untar --non-strict --file ${pkg}.tar

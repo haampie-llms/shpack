@@ -13,11 +13,12 @@
 #   and makecrc-write-to-file.patch makes the generator write crc.c itself,
 #   which is then appended to util.c (catm) before building.
 
+cd ${DISTFILES}
+sha256sum -c ${PKG}/sources.sha256
+
 BLD=${TMPDIR}/build/${pkg}
 mkdir -p ${BLD}
 cd ${BLD}
-
-sha256sum -c ${PKG}/sources.sha256
 
 ungz --file ${DISTFILES}/${pkg}.tar.gz --output ${pkg}.tar
 untar --non-strict --file ${pkg}.tar

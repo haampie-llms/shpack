@@ -1,0 +1,13 @@
+oriansj/stage0-posix Release_1.9.1 45d90f5955b6907dc6cdea9ebafce558359edcd3
+9015b9e048bd969ffc7884399a17952f21d7a039 AArch64 (9015b9e)
+82efa0d6be1c9bb993a7a62af1cccd8d2cda91f6 AMD64 (82efa0d)
+4b011a85da73a7c97212468d41f17e806ba99547 M2-Mesoplanet (Release_1.13.0)
+bd2fe4b0659fd0ad3f476a5ad0ef801bd134665d M2-Planet (Release_1.13.1)
+68a23cfd05d5a355ba7a30c770d684cbe86fcc4e M2libc (Release_0.2.1-194-g68a23cf)
+4b1ff94cec0341375c788f73901f25fc1edc3ac3 armv7l (4b1ff94)
+cedec6b8066d1db229b6c77d42d120a23c6980ed bootstrap-seeds (Release_1.3.0-9-gcedec6b)
+5adfbf3364261a77109878a56b100aeeb6ef9ac4 mescc-tools (Release_1.7.0)
+a151c245e512076971a3c85bb1502cf92cfa83b6 mescc-tools-extra (Release_1.4.0)
+261c67274cbc396dc211b06c933335c09cc35138 riscv32 (261c672)
+4688bc66bdfd00efd5964350c9d76bdb90a0f72e riscv64 (4688bc6)
+3b9c2bb6d4155e4f2e5f642b5e0f59255dfc5934 x86 (3b9c2bb)

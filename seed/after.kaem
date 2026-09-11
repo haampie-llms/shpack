@@ -1,0 +1,66 @@
+#!/kaem --verbose --strict
+# SPDX-License-Identifier: MIT
+#
+# shpack's stage0-posix hook (replaces upstream's placeholder after.kaem; the
+# rest of seed/ is a pristine copy of stage0-posix, see seed/UPSTREAM).
+# ${ARCH_DIR}/kaem.run execs this once every mescc-tools and mescc-tools-extra
+# binary sits in ./${ARCH_DIR}/bin. Inherited from it: ARCH (amd64|aarch64) and
+# ARCH_DIR (AMD64|AArch64). CWD is seed/, the directory the seed was exec'd
+# from, and everything here is relative to it: no path is known yet.
+#
+# One job: build shpack's kaem from ../vendor/kaem (mescc-tools 1.7.0 kaem with
+# the no-malloc-per-command optimization, MAX_ARRAY 4096, PWD and include)
+# exactly the way stage0-posix builds upstream's, then exec it -- with a CLEAN
+# environment (--init-mode), so nothing from the launching shell reaches the
+# build -- on the shpack driver, which derives every path from ${PWD}.
+
+# M2-Planet resolves "..." includes relative to the including file and kaem.h
+# includes ../M2libc/bootstrappable.h, so stage the overlay in a scratch copy
+# of the mescc-tools/Kaem layout: vendor/kaem carries only the files that
+# differ from upstream; kaem_globals.{c,h} and bootstrappable.h are upstream's.
+K=./${ARCH_DIR}/artifact/shpack-kaem
+./${ARCH_DIR}/bin/mkdir -p ${K}/Kaem
+./${ARCH_DIR}/bin/mkdir -p ${K}/M2libc
+./${ARCH_DIR}/bin/cp ../vendor/kaem/kaem.c ${K}/Kaem/kaem.c
+./${ARCH_DIR}/bin/cp ../vendor/kaem/kaem.h ${K}/Kaem/kaem.h
+./${ARCH_DIR}/bin/cp ../vendor/kaem/variable.c ${K}/Kaem/variable.c
+./${ARCH_DIR}/bin/cp ./mescc-tools/Kaem/kaem_globals.c ${K}/Kaem/kaem_globals.c
+./${ARCH_DIR}/bin/cp ./mescc-tools/Kaem/kaem_globals.h ${K}/Kaem/kaem_globals.h
+./${ARCH_DIR}/bin/cp ./M2libc/bootstrappable.h ${K}/M2libc/bootstrappable.h
+
+# Same file list and flags as ${ARCH_DIR}/mescc-tools-mini-kaem.kaem's kaem.
+./${ARCH_DIR}/bin/M2-Planet --architecture ${ARCH} \
+	-f ./M2libc/sys/types.h \
+	-f ./M2libc/stddef.h \
+	-f ./M2libc/sys/utsname.h \
+	-f ./M2libc/${ARCH}/linux/unistd.c \
+	-f ./M2libc/${ARCH}/linux/fcntl.c \
+	-f ./M2libc/fcntl.c \
+	-f ./M2libc/ctype.c \
+	-f ./M2libc/stdlib.c \
+	-f ./M2libc/string.c \
+	-f ./M2libc/stdarg.h \
+	-f ./M2libc/stdio.h \
+	-f ./M2libc/stdio.c \
+	-f ./M2libc/bootstrappable.c \
+	-f ${K}/Kaem/kaem.h \
+	-f ${K}/Kaem/variable.c \
+	-f ${K}/Kaem/kaem_globals.c \
+	-f ${K}/Kaem/kaem.c \
+	--debug \
+	-o ${K}/kaem.M1
+./${ARCH_DIR}/bin/blood-elf --64 --little-endian -f ${K}/kaem.M1 -o ${K}/kaem-footer.M1
+./${ARCH_DIR}/bin/M1 --architecture ${ARCH} --little-endian \
+	-f ./M2libc/${ARCH}/${ARCH}_defs.M1 \
+	-f ./M2libc/${ARCH}/libc-full.M1 \
+	-f ${K}/kaem.M1 \
+	-f ${K}/kaem-footer.M1 \
+	-o ${K}/kaem.hex2
+./${ARCH_DIR}/bin/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 \
+	-f ./M2libc/${ARCH}/ELF-${ARCH}-debug.hex2 \
+	-f ${K}/kaem.hex2 \
+	-o ${K}/kaem
+
+# Hand over. The per-arch entry only names ARCH/ARCH_DIR (lost with the env)
+# and includes the shared driver.
+exec ${K}/kaem --init-mode --verbose --strict --file ../shpack/bootstrap/start.${ARCH}.kaem

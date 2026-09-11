@@ -10,10 +10,22 @@ TESTROOT=$(cd "$(dirname "$0")/.." && pwd)
 TESTDIR=$(mktemp -d /tmp/shpack-test.XXXXXX)
 trap 'rm -rf "$TESTDIR"' EXIT
 
+# shpack's configuration is its environment (what bootstrap/start.kaem exports
+# in a real run); the fixture plays that role here.
+export ROOT="$TESTDIR"
+export STORE="$TESTDIR/store"
+export DISTFILES="$TESTDIR/distfiles"
+export BUILDDIR="$TESTDIR"
+export ARCH=testarch
+export JOBS=2
+export BASEPATH="$PATH"
+export CONFIG_SHELL="$(command -v sh)"
 export SHPACK_VAR="$TESTDIR/var"
 export SHPACK_REPO="$TESTDIR/repo"
 export SHPACK_EXTERNALS="$TESTDIR/externals"
-export SHPACK_CONFIG="$TESTDIR/config"
+# Unsandboxed, no shebang rewriting, and no two-stage make (t-install opts in):
+# etc/config yields to these empty-but-set values.
+export SANDBOX= PATCH_SHEBANGS= SHPACK_BOOTSTRAP_MAKE=
 
 mkdir -p "$TESTDIR/store" "$TESTDIR/distfiles" "$SHPACK_REPO"
 : > "$SHPACK_EXTERNALS"
@@ -25,15 +37,6 @@ mkdir -p "$TESTDIR/store/dash/bin"
 ln -sf "$(command -v sh)" "$TESTDIR/store/dash/bin/sh"
 printf 'dash@host %s\n' "$TESTDIR/store/dash" >> "$SHPACK_EXTERNALS"
 export TEST_DASH_SH="$TESTDIR/store/dash/bin/sh"
-
-cat > "$SHPACK_CONFIG" <<EOF
-ARCH=testarch
-JOBS=2
-STORE=$TESTDIR/store
-DISTFILES=$TESTDIR/distfiles
-BASEPATH=$PATH
-CONFIG_SHELL=$(command -v sh)
-EOF
 
 shpack() {
     sh "$TESTROOT/bin/shpack" "$@"
