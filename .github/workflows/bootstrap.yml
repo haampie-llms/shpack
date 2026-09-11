@@ -1,0 +1,73 @@
+name: bootstrap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shpack test suite (host dash, no sandbox)
+        run: ./shpack/tests/run.sh
+
+  # The one-exec bootstrap, natively on each arch, up to the first C compiler
+  # (gcc-boot@4.7): the whole kaem phase plus a representative slice of the
+  # sandboxed shell phase, in well under an hour on a 4-core runner. The full
+  # toolchain (gcc 16) is left to local runs.
+  gcc47:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # ~700 MB of tarballs; keyed on everything that pins them.
+      - name: cache distfiles
+        uses: actions/cache@v4
+        with:
+          path: distfiles
+          key: distfiles-${{ hashFiles('shpack/packages/*/package.sh', 'shpack/bootstrap/*/sources.sha256', 'shpack/bootstrap/*/kaem.run') }}
+          restore-keys: distfiles-
+
+      - name: fetch distfiles
+        run: ./fetch-distfiles.sh
+
+      - name: configure
+        run: |
+          cat > shpack.conf <<'EOF'
+          COMMAND=install
+          SPEC=gcc-boot@4.7-2013.11
+          EOF
+          uname -m; nproc; cat /sys/kernel/security/lsm; echo
+
+      # cd seed && exec bootstrap-seeds/POSIX/<arch>/kaem-optional-seed kaem.<arch>
+      - name: bootstrap (${{ matrix.arch }})
+        run: ./run-local.sh --arch ${{ matrix.arch }}
+
+      - name: smoke test the built gcc 4.7
+        run: |
+          G=$(ls -d store/gcc-boot-4.7-2013.11-*)
+          B=$(ls -d store/binutils-2.30-musl-*)
+          printf '#include <stdio.h>\nint main(void){printf("hello from %%s\\n", __VERSION__);return 0;}\n' > hello.c
+          env -i PATH="$G/bin:$B/bin" gcc -static -O2 -o hello hello.c
+          ./hello
+          ls store
+
+      - name: upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.arch }}
+          path: tmp/shpack/logs/
+          if-no-files-found: ignore
