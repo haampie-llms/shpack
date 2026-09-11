@@ -110,16 +110,20 @@ trap 'rm -f "$curlrc" "$checks"' EXIT INT TERM
 
 # One curl config (url+output per entry) for the files we still need, plus a
 # checksum list for everything (so a complete tree is re-verified for free).
-# GNU URLs: the recipes name ftpmirror.gnu.org (what upstream documents), which
-# bounces to a random mirror -- in practice one with an expired certificate or
-# a 403 every few runs. Download from the canonical ftp.gnu.org instead; the
-# recipe text (and so the package hashes) stays as-is.
+# GNU URLs: the recipes name ftpmirror.gnu.org (what upstream documents) or
+# ftp.gnu.org. The former bounces to a random mirror -- one with an expired
+# certificate or a 403 every few runs -- and the latter stalled every parallel
+# connection from a CI runner. Download from mirrors.kernel.org (a CDN-backed
+# full mirror of ftp.gnu.org) instead; the recipe text, and so the package
+# hashes, stays as-is. The sha256 check below is what actually vouches for
+# the bytes, whichever host served them.
 printf '%s\n' "$manifest" | while read -r sha name url; do
     case "$sha" in ''|'#'*) continue ;; esac
     printf '%s  %s\n' "$sha" "$dest/$name" >> "$checks"
     [ -s "$dest/$name" ] && continue
     case "$url" in
-        https://ftpmirror.gnu.org/*) url="https://ftp.gnu.org/gnu/${url#https://ftpmirror.gnu.org/}" ;;
+        https://ftpmirror.gnu.org/*) url="https://mirrors.kernel.org/gnu/${url#https://ftpmirror.gnu.org/}" ;;
+        https://ftp.gnu.org/gnu/*)   url="https://mirrors.kernel.org/gnu/${url#https://ftp.gnu.org/gnu/}" ;;
     esac
     printf 'url = "%s"\noutput = "%s"\n' "$url" "$dest/$name" >> "$curlrc"
 done
@@ -129,7 +133,11 @@ if [ -s "$curlrc" ]; then
     echo "fetch-distfiles: downloading $n file(s) into $dest/ ($jobs in parallel)..."
     # Single parallel curl invocation. --remove-on-error drops partial/failed
     # outputs so a re-run retries them instead of skipping a truncated file.
-    curl --fail --location --retry 3 --connect-timeout 30 \
+    # A transfer that stalls (under 1 KB/s for a minute) or drags past 15
+    # minutes is aborted and retried (--retry covers timeouts), so one dead
+    # mirror cannot hang the whole batch.
+    curl --fail --location --retry 3 --retry-all-errors --connect-timeout 30 \
+         --speed-limit 1000 --speed-time 60 --max-time 900 \
          --remove-on-error --parallel --parallel-max "$jobs" \
          --config "$curlrc"
 else
