@@ -110,10 +110,17 @@ trap 'rm -f "$curlrc" "$checks"' EXIT INT TERM
 
 # One curl config (url+output per entry) for the files we still need, plus a
 # checksum list for everything (so a complete tree is re-verified for free).
+# GNU URLs: the recipes name ftpmirror.gnu.org (what upstream documents), which
+# bounces to a random mirror -- in practice one with an expired certificate or
+# a 403 every few runs. Download from the canonical ftp.gnu.org instead; the
+# recipe text (and so the package hashes) stays as-is.
 printf '%s\n' "$manifest" | while read -r sha name url; do
     case "$sha" in ''|'#'*) continue ;; esac
     printf '%s  %s\n' "$sha" "$dest/$name" >> "$checks"
     [ -s "$dest/$name" ] && continue
+    case "$url" in
+        https://ftpmirror.gnu.org/*) url="https://ftp.gnu.org/gnu/${url#https://ftpmirror.gnu.org/}" ;;
+    esac
     printf 'url = "%s"\noutput = "%s"\n' "$url" "$dest/$name" >> "$curlrc"
 done
 
