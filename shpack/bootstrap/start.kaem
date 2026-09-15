@@ -275,4 +275,7 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # BASEPATH [JOBS]. `shpack install gcc` by default; COMMAND=shell drops into
 # an interactive dash with shpack on hand (see shpack.conf.example).
 BASEPATH=${PATH}
+# Kaem-phase-only variables must not reach the shell phase: Makefiles honour
+# LIBDIR/BINDIR from the environment (zstd's `LIBDIR ?=` broke on it).
+unset ARCH_DIR BINDIR BOOT INCDIR LIBC_PREFIX LIBDIR M2 MESR pkg PKG PREFIX S0 SEEDDIR T
 exec ${STORE}/dash-0.5.12/bin/sh ${ROOT}/shpack/bin/shpack ${COMMAND} ${SPEC}
