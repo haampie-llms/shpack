@@ -248,7 +248,10 @@ ran is always there to read.
 
 ## Concretization and store
 
-`shpack install <name>` resolves names to concrete versions (the first version
+The concretizer is Starlark too ([shpack/lib/concretize.star](shpack/lib/concretize.star)),
+run by `star concretize`: a pure function from the recipes, their file hashes
+and the externals to the state files and `dag.mk`, in the spirit of Spack's
+old greedy concretizer rather than its solver. `shpack install <name>` resolves names to concrete versions (the first version
 a recipe declares wins; `name@version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
 DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
