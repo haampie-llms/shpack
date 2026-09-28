@@ -181,27 +181,14 @@ do_stage() {
     cd "$source_dir"
 }
 
+# do_patch -- apply $SPEC/patches ("FILE LEVEL": the recipe's patches that
+# apply to this version and arch, as concretization selected them).
 do_patch() {
-    local line file kv level cond_arch cond_when
-    if [ ! -f "$VAR/recipe/$name/patches" ]; then return 0; fi
-    while read -r line; do
-        set -- $line
-        file=$1
-        shift
-        level=1 cond_arch= cond_when=
-        for kv in "$@"; do
-            case $kv in
-                arch=*)  cond_arch=${kv#*=} ;;
-                level=*) level=${kv#*=} ;;
-                when=*)  cond_when=${kv#*=} ;;
-                *) die "patch $file: unknown argument '$kv'" ;;
-            esac
-        done
-        if [ -n "$cond_arch" ] && [ "$cond_arch" != "$ARCH" ]; then continue; fi
-        if [ -n "$cond_when" ] && ! when_matches "$cond_when" "$version"; then continue; fi
+    local file level
+    while read -r file level; do
         echo "==> $id: applying $file"
         command patch -p"$level" < "$package_dir/patches/$file"
-    done < "$VAR/recipe/$name/patches"
+    done < "$SPEC/patches"
 }
 
 do_finalize() {
@@ -256,8 +243,7 @@ cmd_build_one() {
     # an explicit -j would override it and oversubscribe JOBS x JOBS.
     # 'parallel false' needs -j1 to serialize against that jobserver.
     makejobs=
-    if [ -f "$VAR/recipe/$name/parallel" ] \
-        && [ "$(cat "$VAR/recipe/$name/parallel")" = false ]; then
+    if [ -f "$SPEC/parallel" ]; then
         makejobs=-j1
     fi
     # HOME under the build's own scratch ($VAR, itself under $TMPDIR on the
@@ -337,7 +323,6 @@ cmd_build_one() {
     # flag's stage-dependent value stays out of the build system (configure logs,
     # gcc -v) and app recipes need not append it by hand.
     export SHPACK_FILE_PREFIX_MAP="$file_prefix_map"
-    spec_sources "$name" "$version" > "$SPEC/sources"
 
     echo "==> $id: fetch"
     do_fetch

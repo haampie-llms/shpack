@@ -34,32 +34,3 @@ walk_files() {
         fi
     done
 }
-
-# reverse_lines FILE -> the lines of FILE, last first. (No tac dependency.)
-reverse_lines() {
-    local line out
-    out=
-    while read -r line; do
-        out="$line
-$out"
-    done < "$1"
-    printf '%s' "$out"
-}
-
-# member_line STRING FILE -> true if FILE contains STRING as a whole line.
-member_line() {
-    local line
-    while read -r line; do
-        if [ "$line" = "$1" ]; then return 0; fi
-    done < "$2"
-    return 1
-}
-
-# when_matches WHEN VERSION -> true if a recipe's when (as star writes it: the
-# versions of @=V1,=V2, comma separated, or '-' for all) admits VERSION.
-when_matches() {
-    case ,$1, in
-        ,-,|*",$2,"*) return 0 ;;
-    esac
-    return 1
-}

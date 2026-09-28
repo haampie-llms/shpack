@@ -56,14 +56,19 @@ shpack concretize tool > "$TESTDIR/c.log" 2>&1 || { cat "$TESTDIR/c.log"; fail "
 assert_eq "$(index_field libb 2)" 2.1 "bare libb resolves to the first declared version"
 assert_eq "$(index_field ext 4)" external "ext kind"
 assert_eq "$(index_field liba 4)" built "liba kind"
-# the state files lib/repo.sh documents
-assert_eq "$(cat "$SHPACK_VAR/recipe/libb/versions")" "2.1 - - -
+# the state files of `star recipe --out` (star/PROTOCOL.md)
+for p in liba libb; do
+    mkdir -p "$TESTDIR/rs/$p"
+    "$STAR" recipe --repo "$SHPACK_REPO" --root "$SHPACK_STAR_ROOT" --out "$TESTDIR/rs/$p" $p \
+        || fail "star recipe $p"
+done
+assert_eq "$(cat "$TESTDIR/rs/libb/versions")" "2.1 - - -
 2.0 - - -" "versions state"
-assert_contains "$SHPACK_VAR/recipe/libb/deps" "2.0 build,link cdep"
-assert_contains "$SHPACK_VAR/recipe/libb/deps" "- build,link liba"
-assert_eq "$(cat "$SHPACK_VAR/recipe/liba/description")" "toy leaf library" "description state"
-assert_eq "$(cat "$SHPACK_VAR/recipe/liba/homepage")" "https://example.invalid/liba" "homepage state"
-assert_eq "$(cat "$SHPACK_VAR/recipe/liba/license")" "- MIT" "license state"
+assert_contains "$TESTDIR/rs/libb/deps" "2.0 build,link cdep"
+assert_contains "$TESTDIR/rs/libb/deps" "- build,link liba"
+assert_eq "$(cat "$TESTDIR/rs/liba/description")" "toy leaf library" "description state"
+assert_eq "$(cat "$TESTDIR/rs/liba/homepage")" "https://example.invalid/liba" "homepage state"
+assert_eq "$(cat "$TESTDIR/rs/liba/license")" "- MIT" "license state"
 # when="@=2.0" only applies to 2.0: 2.1 has no cdep
 case $(cat "$SHPACK_VAR/topo") in
     *cdep*) fail "cdep must not be in libb@2.1's closure" ;;

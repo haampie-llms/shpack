@@ -7,23 +7,6 @@
 # topo, roots, index and dag.mk (documented in concretize.star). This file
 # hands it the configuration and runs the result.
 
-# compose_path ID -> "ownbin:depbin:...:" -- the node's own bin dir, then the
-# bin dir of every node in its path set (build deps and what they run, not
-# link-only deps or the build deps of deps), most-derived first, each suffixed
-# ':'. The caller appends BASEPATH. The order is the node's own (a DFS
-# post-order over its declared dependencies, reversed), never the whole DAG's:
-# which of two dependencies' `ld` comes first must not depend on what else was
-# concretized alongside, since it is not in the hash.
-compose_path() {
-    local out c
-    out=$(cat "$VAR/spec/$1/prefix")/bin:
-    for c in $(reverse_lines "$VAR/spec/$1/order"); do
-        member_line "$c" "$VAR/spec/$1/path" || continue
-        out=$out$(cat "$VAR/spec/$c/prefix")/bin:
-    done
-    printf '%s' "$out"
-}
-
 # stamp_of ID -> the stamp filename (hash included: a re-concretization that
 # changes a node's hash invalidates its stamp).
 stamp_of() {
@@ -55,9 +38,9 @@ cmd_concretize() {
     # PATH the caller grew during the kaem phase.
     PATH=$BASEPATH
     export PATH
-    rm -rf "$VAR/spec" "$VAR/recipe"
+    rm -rf "$VAR/spec"
     rm -f "$VAR/topo" "$VAR/roots" "$VAR/index" "$VAR/dag.mk"
-    mkdir -p "$VAR/spec" "$VAR/recipe"
+    mkdir -p "$VAR/spec"
     write_concretize_cfg > "$VAR/concretize-cfg.star"
     "$STAR" concretize --repo "$REPO" --root "$STAR_ROOT" \
         --module "$SHPACK_LIB/concretize.star" --cfg "$VAR/concretize-cfg.star" \
@@ -115,7 +98,7 @@ cmd_env() {
     done < "$VAR/index"
     [ -n "$found" ] || die "'$1' is not in the concretized DAG"
     printf 'PREFIX=%s\n' "$(cat "$VAR/spec/$found/prefix")"
-    printf 'PATH=%s%s\n' "$(compose_path "$found")" "$BASEPATH"
+    printf 'PATH=%s%s\n' "$(cat "$VAR/spec/$found/path")" "$BASEPATH"
 }
 
 cmd_find() {

@@ -5,18 +5,18 @@
 # concretize.c) for `shpack concretize`; pure: every input comes from `host`
 # and `cfg`, and the result is the state files to write under $VAR:
 #
-#   spec/<id>/        one dir per node, id = name-version
+#   spec/<id>/        one dir per node, id = name-version: what the builder
+#                     and `shpack env` read, nothing else
 #     name, version, kind (built|external), hash, prefix
 #     deps              direct dep ids, recipe order
 #     edges             "ID TYPES" per direct dep, TYPES as in Spack (build,link,...)
 #     closure           transitive dep ids, sorted
-#     order             the closure in DFS post-order over declared deps
-#     exec              what a dependent may run through this node: its run
-#                       deps, and theirs and its link deps' (Spack's
-#                       RUNTIME_EXECUTABLE); for a dependent's PATH
-#     path              whose bin/ this node's build puts on PATH: every build
-#                       dep, plus its exec
+#     path              the build's PATH before BASEPATH: "DIR/bin:DIR/bin:..."
 #     manifest          the canonical hash input (kept for auditability)
+#   and for built nodes, what the builder takes from the recipe:
+#     sources           "SHA FNAME URL" per distfile: the version's, its resources'
+#     patches           "FILE LEVEL" per patch that applies to this version and arch
+#     parallel          present, "false", for a recipe that sets parallel = False
 #   topo              all ids, dependencies before dependents
 #   roots             ids of the requested packages
 #   index             one line per node: NAME VERSION HASH KIND PREFIX
@@ -32,6 +32,7 @@
 # stacks, and loop over a range that is far longer than any DAG.
 
 _FOREVER = range(1 << 30)
+_ARCHES = {"target=x86_64:": "amd64", "target=aarch64:": "aarch64"}
 _TYPE_LETTERS = [("build", "b"), ("link", "l"), ("run", "r"), ("test", "t")]
 
 def _lines(items):
@@ -46,9 +47,14 @@ def _when_versions(when):
             return [v[1:] for v in term[1:].split(",")]
     return None
 
-def _when_matches(when, version):
+def _when_matches(when, version, arch = None):
     vs = _when_versions(when)
-    return vs == None or version in vs
+    if vs != None and version not in vs:
+        return False
+    for term in (when or "").split(" "):
+        if term in _ARCHES and _ARCHES[term] != arch:
+            return False
+    return True
 
 def _add(lst, x):
     if x not in lst:
@@ -141,21 +147,38 @@ def concretize(host, cfg, specs):
                         _add(n["path"], c)
             n["closure"] = sorted({c: None for c in closure}.keys())
             n["manifest"] = manifest(r, f["edges"])
+            n["recipe"] = build_inputs(r)
         n["hash"] = host.sha256(n["manifest"])[:7]
         n["prefix"] = r.prefix if r.kind == "external" else "%s/%s-%s" % (store, r.id, n["hash"])
         nodes[r.id] = n
         active.pop(r.id)
         topo.append(r.id)
 
+    def sources(r):
+        """(sha256, fname, url) of the version's source and its resources."""
+        ds = record(r.name)["directives"]
+        return [(d["sha256"], d["fname"] or "-", d["url"] or "-") for d in ds
+                if d["directive"] == "version" and d["version"] == r.version and d["sha256"]] + [
+                (d["sha256"], d["fname"], d["url"] or "-") for d in ds
+                if d["directive"] == "resource" and _when_matches(d["when"], r.version)]
+
+    def build_inputs(r):
+        """The builder's files from the recipe: sources, patches, parallel."""
+        rec = record(r.name)
+        files = {
+            "sources": _lines(["%s %s %s" % s for s in sources(r)]),
+            "patches": _lines(["%s %d" % (d["file"], d["level"]) for d in rec["directives"]
+                               if d["directive"] == "patch" and
+                               _when_matches(d["when"], r.version, cfg["arch"])]),
+        }
+        if not rec["parallel"]:
+            files["parallel"] = "false\n"
+        return files
+
     def manifest(r, edges):
         rec = record(r.name)
         out = ["package " + r.name, "version " + r.version, "arch " + cfg["arch"]]
-        for d in rec["directives"]:
-            if d["directive"] == "version" and d["version"] == r.version and d["sha256"]:
-                out.append("source %s %s" % (d["sha256"], d["fname"] or "-"))
-        for d in rec["directives"]:
-            if d["directive"] == "resource" and _when_matches(d["when"], r.version):
-                out.append("source %s %s" % (d["sha256"], d["fname"]))
+        out += ["source %s %s" % (sha, fname) for sha, fname, _ in sources(r)]
         for path, sha in host.files(r.name):
             out.append("file %s %s" % (sha, path))
         # A Starlark recipe also depends on the evaluator and on every module
@@ -206,9 +229,12 @@ def concretize(host, cfg, specs):
         d = "spec/" + id + "/"
         for k in ["name", "version", "kind", "hash", "prefix"]:
             files[d + k] = n[k] + "\n"
-        for k in ["deps", "edges", "closure", "order", "exec", "path"]:
+        for k in ["deps", "edges", "closure"]:
             files[d + k] = _lines(n[k])
         files[d + "manifest"] = n["manifest"]
+        files[d + "path"] = compose_path(id) + "\n"
+        for k, v in n.get("recipe", {}).items():
+            files[d + k] = v
     files["index"] = _lines(["%s %s %s %s %s" % (nodes[id]["name"], nodes[id]["version"],
                                                  nodes[id]["hash"], nodes[id]["kind"],
                                                  nodes[id]["prefix"]) for id in topo])

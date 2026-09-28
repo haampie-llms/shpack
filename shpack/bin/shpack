@@ -70,7 +70,6 @@ STAR_ROOT=${SHPACK_STAR_ROOT:-$SHPACK_ROOT}
 export PATCH_SHEBANGS
 
 . "$SHPACK_LIB/spec.sh"
-. "$SHPACK_LIB/repo.sh"
 . "$SHPACK_LIB/concretize.sh"
 . "$SHPACK_LIB/builder.sh"
 
