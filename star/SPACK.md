@@ -28,9 +28,13 @@ same length as shpack's.
 ## TODO
 
 - **gcc-boot1 (9.5).** `xgcc -print-multi-os-directory` gives `../lib64`
-  under Spack and `.` under shpack, so libstdc++ lands in `lib64/`. Something
-  in the build differs that the recorded environments don't show. Keep both
-  stages (`SHPACK_KEEP_STAGE`, `SPACK_STAR_KEEP_STAGE`) and diff `config.log`.
+  under Spack and `.` under shpack, so libstdc++ lands in `lib64/`. The
+  driver's compiled-in `*multilib` spec differs: shpack's is `. !mabi=lp64;`,
+  Spack's is `. !mabi=lp64;.:../lib64 mabi=lp64;`. So genmultilib saw
+  aarch64's `MULTILIB_OSDIRNAMES` in one build and not in the other. The
+  environments the two hosts construct for this build are identical apart
+  from the jobserver fds. Keep both stages (`SHPACK_KEEP_STAGE`,
+  `SPACK_STAR_KEEP_STAGE`) and diff `gcc/Makefile` and `s-mlib`.
   gcc 16's 45 differences probably follow from this.
 - **gcc-boot0, gcc-boot2.** Only `executable_checksum` in cc1/cc1plus
   differs; the linked code is identical. One of genchecksum's inputs differs:
