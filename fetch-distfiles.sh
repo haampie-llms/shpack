@@ -8,7 +8,14 @@
 # never drifts from the recipes:
 #   - packages:  each shpack/packages/*/package.sh is sourced with the recipe
 #                directives stubbed, so its version/resource lines print their
-#                "sha256= / url= / fname=" fields (hook functions are never run).
+#                "sha256= / url= / fname=" fields (hook functions are never run);
+#                each package.star has its top-level version(...)/resource(...)
+#                calls scanned for their sha256 = / url = / fname = string
+#                literals (star itself does not exist on the host). t-lint
+#                checks the scan against `star recipe`.
+#
+# `fetch-distfiles.sh --list` prints the manifest and exits.
+# `fetch-distfiles.sh --scan FILE` prints what one package.star contributes.
 #   - bootstrap: shpack/bootstrap/*/sources.sha256 (sha256 + @DISTFILES@/fname)
 #                paired by filename with the "# Source: URL [FNAME]" line in the
 #                same dir's kaem.run (FNAME defaults to the URL basename; give it
@@ -51,7 +58,47 @@ pkg_distfiles() {
             . "$p"
         )
     done
+    for p in "$repo"/*/package.star; do
+        [ -f "$p" ] || continue
+        star_distfiles "$p"
+    done
 }
+
+# star_distfiles FILE -- the sources of a package.star: every call starting
+# at column 0 as version( or resource(, up to its closing paren, with its
+# sha256/url/fname keyword arguments as plain string literals.
+star_distfiles() {
+    awk '
+        function field(s, k,   m) {
+            if (match(s, "(^|[^a-z_])" k " *= *\"[^\"]*\"")) {
+                m = substr(s, RSTART, RLENGTH)
+                sub(/^[^"]*"/, "", m)
+                sub(/"$/, "", m)
+                return m
+            }
+            return "-"
+        }
+        function emit(s,   sha, url, fname) {
+            sha = field(s, "sha256"); url = field(s, "url"); fname = field(s, "fname")
+            if (sha == "-") return
+            if (fname == "-" && url != "-") { fname = url; sub(/.*\//, "", fname) }
+            printf "%s  %s  %s\n", sha, fname, url
+        }
+        /^(version|resource)\(/ { collecting = 1; buf = ""; depth = 0 }
+        collecting {
+            line = $0
+            sub(/#.*/, "", line)
+            buf = buf " " line
+            depth += gsub(/\(/, "(", line) - gsub(/\)/, ")", line)
+            if (depth <= 0) { emit(buf); collecting = 0 }
+        }' "$1"
+}
+
+# --scan FILE: the star_distfiles lines of one package.star (for t-lint).
+if [ "${1:-}" = --scan ]; then
+    star_distfiles "$2"
+    exit 0
+fi
 
 # Bootstrap: sha256+fname come from each step's sources.sha256; the URL comes
 # from the "# Source:" line in the same tree, paired by filename.
@@ -93,6 +140,11 @@ manifest=$(sort -u "$raw" | awk '
                 next }
     { sha[$2] = $1; print }')
 rm -f "$raw"
+
+if [ "${1:-}" = --list ]; then
+    printf '%s\n' "$manifest"
+    exit 0
+fi
 
 # sha256 -c front-end: GNU coreutils vs. BSD/macOS.
 if command -v sha256sum >/dev/null 2>&1; then

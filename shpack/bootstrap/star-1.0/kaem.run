@@ -1,0 +1,20 @@
+#!/kaem --verbose --strict
+# SPDX-License-Identifier: MIT
+#
+# star: the Starlark interpreter that evaluates package.star recipes in the
+# shell phase (project-original C, ${ROOT}/star; see star/README.md). One
+# translation unit, statically linked with musl by the just-built tcc, like
+# sandbox and patch-shebangs. The source lives outside shpack/ because it is
+# a standalone program, not a kaem-phase asset.
+#
+# Compiled by relative path from inside the source tree: tcc records the
+# source path in the object's STT_FILE symbol, so an absolute one would put
+# the tree's location into the binary.
+
+cd ${ROOT}/star
+tcc -static -o ${BINDIR}/star star.c
+
+# Smoke test: the interpreter evaluates Starlark and fails on a failed check.
+cd ${PKG}/files
+${BINDIR}/star version
+${BINDIR}/star run smoke.star
