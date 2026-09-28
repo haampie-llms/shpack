@@ -39,3 +39,28 @@ def replace_bin_sh(ctx, files):
     build shell. Unlike patch-shebangs (which rewrites #! lines), these are
     string literals in the program text. Belongs in edit()."""
     return substitute(files, "/bin/sh", ctx.sh)
+
+def uname_shim(ctx):
+    """Actions putting a minimal `uname` for the target first on PATH. There is
+    no uname in the sandbox, and several configure scripts and Makefiles ask
+    it for the system (perl's Configure, cpython's configure, zstd's soname
+    logic). Belongs in edit(); the PATH change persists through the build."""
+    shimbin = ctx.stage_dir + "/shimbin"
+    script = "\n".join([
+        "#!" + ctx.sh,
+        'case "$1" in',
+        "  -s) echo Linux ;;",
+        "  -r) echo 6.9.1 ;;",
+        "  -m|-p|-i) echo %s ;;" % cpu(ctx),
+        "  -n) echo shpack ;;",
+        "  -o) echo GNU/Linux ;;",
+        '  -a) echo "Linux shpack 6.9.1 #1 SMP %s GNU/Linux" ;;' % cpu(ctx),
+        "  *)  echo Linux ;;",
+        "esac",
+        "",
+    ])
+    return [
+        mkdir(shimbin),
+        write_file(shimbin + "/uname", script, mode = "755"),
+        prepend_path("PATH", shimbin),
+    ]
