@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
-# package.star recipes: directive state, resolution and hashing, mixed with
-# package.sh recipes in one DAG; the twin of t-concretize/t-hash.
+# Recipes: the directive state star writes, when= conditions,
+# the manifest lines for the evaluator and loaded modules, and recipe errors.
 
 . "$(dirname "$0")/common.sh"
 
@@ -33,13 +33,13 @@ def install(ctx):
     return []
 EOF2
 
-# a package.sh recipe on top of Starlark ones: both kinds coexist
-mkpkg tool <<'EOF2'
-description "toy root"
-version 0.5
-build_system generic
-depends_on libb@2.1 liba ext dash
-install() { :; }
+mkstar tool <<'EOF2'
+package(description = "toy root")
+version("0.5")
+build_system("generic")
+depends_on("libb@2.1", "liba", "ext", "dash")
+def install(ctx):
+    return []
 EOF2
 
 echo "ext@3.0 /fake/ext-3.0" >> "$SHPACK_EXTERNALS"
@@ -49,7 +49,7 @@ shpack concretize tool > "$TESTDIR/c.log" 2>&1 || { cat "$TESTDIR/c.log"; fail "
 assert_eq "$(index_field libb 2)" 2.1 "bare libb resolves to the first declared version"
 assert_eq "$(index_field ext 4)" external "ext kind"
 assert_eq "$(index_field liba 4)" built "liba kind"
-# the state files are the ones package.sh directives write
+# the state files lib/repo.sh documents
 assert_eq "$(cat "$SHPACK_VAR/recipe/libb/versions")" "2.1 - - -
 2.0 - - -" "versions state"
 assert_contains "$SHPACK_VAR/recipe/libb/deps" "2.0 cdep"
@@ -80,7 +80,7 @@ echo "# tweak" >> "$SHPACK_REPO/liba/package.star"
 shpack concretize tool > /dev/null
 [ "$(index_field liba 3)" != "$a1" ] || fail "liba hash must change with its recipe"
 [ "$(index_field libb 3)" != "$b1" ] || fail "libb hash must change with a dep"
-[ "$(index_field tool 3)" != "$t1" ] || fail "tool (package.sh) hash must change transitively"
+[ "$(index_field tool 3)" != "$t1" ] || fail "tool hash must change transitively"
 
 # Editing a loaded module changes the hash of every recipe that loads it.
 a2=$(index_field liba 3)

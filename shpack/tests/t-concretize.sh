@@ -3,28 +3,37 @@
 
 . "$(dirname "$0")/common.sh"
 
-mkpkg liba <<'EOF'
-description "toy leaf library"
-version 1.0
-build_system generic
-install() { :; }
+mkstar liba <<'EOF'
+package(
+    description = "toy leaf library",
+)
+version("1.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
 
-mkpkg libb <<'EOF'
-description "toy mid-layer, two versions"
-version 2.1
-version 2.0
-build_system generic
-depends_on liba
-install() { :; }
+mkstar libb <<'EOF'
+package(
+    description = "toy mid-layer, two versions",
+)
+version("2.1")
+version("2.0")
+build_system("generic")
+depends_on("liba")
+def install(ctx):
+    return []
 EOF
 
-mkpkg tool <<'EOF'
-description "toy root"
-version 0.5
-build_system generic
-depends_on libb@2.1 liba ext
-install() { :; }
+mkstar tool <<'EOF'
+package(
+    description = "toy root",
+)
+version("0.5")
+build_system("generic")
+depends_on("libb@2.1", "liba", "ext")
+def install(ctx):
+    return []
 EOF
 
 echo "ext@3.0 /fake/ext-3.0" > "$SHPACK_EXTERNALS"
@@ -68,9 +77,10 @@ if shpack concretize nosuchpkg 2> /dev/null; then
     fail "expected concretize nosuchpkg to fail"
 fi
 
-mkpkg broken <<'EOF'
-version 1.0
-depends_on missingdep
+mkstar broken <<'EOF'
+package()
+version("1.0")
+depends_on("missingdep")
 EOF
 if shpack concretize broken 2> /dev/null; then
     fail "expected unresolvable dep to fail"
@@ -78,24 +88,30 @@ fi
 
 # Conditional (when=VER) dependencies: one recipe, two versions, dep sets
 # differing by version, plus an unconditional dep shared by both.
-mkpkg dep-old <<'EOF'
-version 1.0
-build_system generic
-install() { :; }
+mkstar dep-old <<'EOF'
+package()
+version("1.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
-mkpkg dep-new <<'EOF'
-version 2.0
-build_system generic
-install() { :; }
+mkstar dep-new <<'EOF'
+package()
+version("2.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
-mkpkg multi <<'EOF'
-version 4.7
-version 8.5
-build_system generic
-depends_on liba
-depends_on dep-old when=4.7
-depends_on dep-new when=8.5
-install() { :; }
+mkstar multi <<'EOF'
+package()
+version("4.7")
+version("8.5")
+build_system("generic")
+depends_on("liba")
+depends_on("dep-old", when = "@=4.7")
+depends_on("dep-new", when = "@=8.5")
+def install(ctx):
+    return []
 EOF
 
 # @4.7 pulls dep-old and the unconditional liba, but not dep-new.

@@ -34,5 +34,5 @@ PATCH_SHEBANGS=${PATCH_SHEBANGS-$STORE/patch-shebangs-1.0/bin/patch-shebangs}
 
 # The Starlark evaluator for package.star recipes (kaem phase, built right
 # after tcc+musl). `star recipe` writes a recipe's directive state (the same
-# files the package.sh directives write), `star plan` renders its build.
+# state files lib/repo.sh documents), `star plan` renders its build.
 STAR=${STAR-$STORE/star-1.0/bin/star}

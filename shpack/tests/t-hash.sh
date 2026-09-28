@@ -3,24 +3,30 @@
 
 . "$(dirname "$0")/common.sh"
 
-mkpkg liba <<'EOF'
-version 1.0
-build_system generic
-install() { :; }
+mkstar liba <<'EOF'
+package()
+version("1.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
 
-mkpkg libb <<'EOF'
-version 2.0
-build_system generic
-depends_on liba
-install() { :; }
+mkstar libb <<'EOF'
+package()
+version("2.0")
+build_system("generic")
+depends_on("liba")
+def install(ctx):
+    return []
 EOF
 
-mkpkg tool <<'EOF'
-version 0.5
-build_system generic
-depends_on libb
-install() { :; }
+mkstar tool <<'EOF'
+package()
+version("0.5")
+build_system("generic")
+depends_on("libb")
+def install(ctx):
+    return []
 EOF
 
 shpack concretize tool > /dev/null
@@ -33,7 +39,7 @@ assert_eq "$(index_field libb 3)" "$b1" "libb hash determinism"
 assert_eq "$(index_field tool 3)" "$t1" "tool hash determinism"
 
 # Editing the leaf recipe changes every hash above it (Merkle property).
-echo "# tweak" >> "$SHPACK_REPO/liba/package.sh"
+echo "# tweak" >> "$SHPACK_REPO/liba/package.star"
 shpack concretize tool > /dev/null
 a2=$(index_field liba 3); b2=$(index_field libb 3); t2=$(index_field tool 3)
 [ "$a2" != "$a1" ] || fail "liba hash must change when its recipe changes"
@@ -41,7 +47,7 @@ a2=$(index_field liba 3); b2=$(index_field libb 3); t2=$(index_field tool 3)
 [ "$t2" != "$t1" ] || fail "tool hash must change transitively"
 
 # Editing the middle recipe leaves the leaf alone.
-echo "# tweak" >> "$SHPACK_REPO/libb/package.sh"
+echo "# tweak" >> "$SHPACK_REPO/libb/package.star"
 shpack concretize tool > /dev/null
 assert_eq "$(index_field liba 3)" "$a2" "liba hash stable"
 [ "$(index_field libb 3)" != "$b2" ] || fail "libb hash must change"
@@ -56,23 +62,29 @@ shpack concretize tool > /dev/null
 # Conditional deps: two versions of one recipe whose dep sets differ by
 # when=VER must hash differently (different resolved deps -> different
 # manifest), with no manifest code change.
-mkpkg cdep-x <<'EOF'
-version 1.0
-build_system generic
-install() { :; }
+mkstar cdep-x <<'EOF'
+package()
+version("1.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
-mkpkg cdep-y <<'EOF'
-version 1.0
-build_system generic
-install() { :; }
+mkstar cdep-y <<'EOF'
+package()
+version("1.0")
+build_system("generic")
+def install(ctx):
+    return []
 EOF
-mkpkg cmulti <<'EOF'
-version 4.7
-version 8.5
-build_system generic
-depends_on cdep-x when=4.7
-depends_on cdep-y when=8.5
-install() { :; }
+mkstar cmulti <<'EOF'
+package()
+version("4.7")
+version("8.5")
+build_system("generic")
+depends_on("cdep-x", when = "@=4.7")
+depends_on("cdep-y", when = "@=8.5")
+def install(ctx):
+    return []
 EOF
 shpack concretize cmulti@4.7 > /dev/null
 m47=$(index_field cmulti 3)

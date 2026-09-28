@@ -4,7 +4,7 @@
 
 The build itself trusts only a single binary seed. Everything else is compiled from checksummed sources. It bootstraps a basic shell first, then increasingly capable C compilers and libraries, and finally the complete toolchain using a new bootstrapping path where the TinyCC C compiler with musl libc is built straight out of stage0-posix via [MES replacement][1]. It targets `x86_64` and `AArch64` natively from the start, which matters on modern systems where 32-bit support (x86, arm32) may be disabled in the kernel or missing from the CPU (e.g. Apple Silicon).
 
-`shpack` borrows ideas from [Spack][4], Nix, and Guix, such as immutable store prefixes and Merkle-hashed dependency graphs. It is no coincidence that the [`package.sh` recipes][5] resemble Spack's: one motivation for the project is to [bootstrap the Spack package manager itself](#shpack-install-spack). Thanks to Guix and [live-bootstrap][2] for showing that a full bootstrap is possible, and to [MES replacement][1] for making it fast.
+`shpack` borrows ideas from [Spack][4], Nix, and Guix, such as immutable store prefixes and Merkle-hashed dependency graphs. It is no coincidence that the [recipes][5] resemble Spack's (they are Starlark, evaluated by [`star`](star/), a small interpreter the bootstrap builds with its first C compiler): one motivation for the project is to [bootstrap the Spack package manager itself](#shpack-install-spack). Thanks to Guix and [live-bootstrap][2] for showing that a full bootstrap is possible, and to [MES replacement][1] for making it fast.
 
 ## Quick start
 
@@ -142,7 +142,9 @@ By design, `shpack` bootstraps *on top of a running Linux*: the build does sysca
 `shpack` is written entirely in POSIX shell, so it runs on an early `dash`, `make`,
 and minimal coreutils; it can take over as soon as the first real shell exists. Its
 simple dependency resolver emits a `Makefile`, so independent packages build in
-parallel under a single `make` jobserver.
+parallel under a single `make` jobserver. The recipes themselves are Starlark,
+evaluated by `star` ([star/](star/)), a small C interpreter the kaem phase
+builds with its first tcc, right after the compiler itself.
 
 Paths in this section are relative to [shpack/](shpack/).
 
@@ -164,40 +166,52 @@ itself as environment variables exported by kaem.
 
 ## Recipes
 
-One directory per package name: `packages/<name>/package.sh`, with optional
-`patches/` and `files/`. A recipe declares versions (with source checksums),
-dependencies, patches and a build system via shell directives, and may override
-build phases with hook functions:
+One directory per package name: `packages/<name>/package.star`, with optional
+`patches/` and `files/`. A recipe is [Starlark](star/DIALECT.md): directives
+declare versions (with source checksums), dependencies, patches and a build
+system, and phase functions return the actions that build the package:
 
-```sh
-description "GNU binary utilities"
-version 2.30 sha256=8c38... url=https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.gz
-build_system autotools
-depends_on tcc musl gmake@4.4.1
-patch arm64-elfnn-howto.patch arch=aarch64
+```python
+load("//build_systems/lib.star", "triple")
 
-configure_args() {
-    printf '%s\n' --with-sysroot="$(prefix_of musl)" --disable-nls
-}
+package(description = "GNU binary utilities", license = "GPL-3.0-or-later")
+version("2.30", sha256 = "8c38...", url = "https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.gz")
+build_system("autotools")
+depends_on("tcc", "musl", "gmake@4.4.1", "dash@0.5.12")
+patch("arm64-elfnn-howto.patch", when = "target=aarch64:")
+
+def configure_args(ctx):
+    return ["--with-sysroot=" + ctx.dep("musl").prefix, "--disable-nls"]
 ```
 
-A `version` line is repeatable, and `depends_on ... when=VER` ties a dependency
-to one declared version (no `when=` means all versions), so one recipe can carry
-several versions with different pinned deps:
+`version` is repeatable (the first one declared is the default), and `when=`
+ties a dependency, patch, resource or build system to one declared version,
+in Spack's spec syntax, so one recipe can carry several versions with
+different pinned deps:
 
-```sh
-version 4.7-2013.11 sha256=... url=...
-version 8.5.0       sha256=... url=...
-depends_on mpfr@2.4.2 when=4.7-2013.11
-depends_on mpfr@3.1.6 when=8.5.0
+```python
+version("4.7-2013.11", sha256 = "...", url = "...")
+version("8.5.0", sha256 = "...", url = "...")
+depends_on("mpfr@2.4.2", when = "@=4.7-2013.11")
+depends_on("mpfr@3.1.6", when = "@=8.5.0")
 ```
+
+Evaluation is pure. A recipe sees only its own text, the modules it loads
+and the build context `ctx`: name, version, arch, prefix, `sh` (the store
+shell), `makejobs`, the stage paths, `ctx.dep(name).prefix` and
+`ctx.satisfies(when)`. It cannot touch the file system or run anything
+itself; it returns actions. [star/PROTOCOL.md](star/PROTOCOL.md) is the full
+contract. Because it is a contract rather than the C code, another Starlark
+implementation (or a future Spack) can evaluate the same recipes.
 
 ## Build systems and phases
 
 Every build runs: `fetch` (sha256-verify distfiles) -> `stage` (unpack to a
-scratch dir) -> `patch` -> build-system phases -> `finalize` (write `.shpack/`
-metadata). The build-system phases, each overridable by defining a function of
-the same name in the recipe:
+scratch dir) -> `patch` -> plan -> the phases -> `finalize` (write `.shpack/`
+metadata). The build systems are Starlark modules in `build_systems/`; a
+recipe overrides a phase by defining a function of the same name, and can
+call the default explicitly (`load("//build_systems/autotools.star",
+autotools_install = "install")`):
 
 | build_system | phases | argument hooks |
 |---|---|---|
@@ -205,20 +219,16 @@ the same name in the recipe:
 | `makefile` | `edit build install` | `build_targets`, `install_targets` |
 | `autotools` | `edit configure build install` | `configure_args`, `build_args`, `install_targets` |
 
-Argument hooks emit one argument per output line (so arguments may contain
-spaces: `printf '%s\n' 'AR=tcc -ar'`). The `edit` phase (no-op by default;
-makefile's default copies `files/Makefile`) is the home for programmatic source
-mutation -- the `replace_bin_sh` repoint, in-tree resource relocation, stamp
-rewrites -- so `setup_build_environment` (also run before the first phase) only
-ever sets environment variables.
+A phase returns a list of actions: `run(...)`, `setenv`/`prepend_path`,
+`chdir`, `mkdir`, `copy`, `move`, `remove`, `symlink`, `write_file`,
+`substitute` (literal), `filter_file` (a regex subset that means the same in
+sed and Python), and a few more. `setup_build_environment(ctx)` runs first
+and may only set environment variables. When a build step has to inspect
+build output, `sh(script)` is the escape hatch; t-lint counts its uses.
 
-Recipes see lowercase shpack metadata and helpers -- `name`, `version`, `id`,
-`package_dir`, `stage_dir`, `source_dir`, `sh` (the store shell), `makejobs`
-(the `-jN` for make), `prefix_of <dep-name>`, `triple [libc] [vendor]`,
-`replace_bin_sh FILE...` -- plus the UPPER env-var/config constants tools
-consume: `PREFIX`, `ARCH`, `JOBS`. `parallel false` disables `-j` for the
-package's make. A recipe that overrides `install()` and needs the coreutils
-binary of the same name must call `command install`.
+`star plan` renders the actions as a plain script (`$VAR/spec/<id>/build.sh`,
+kept in the prefix as `.shpack/build.sh`), which the builder sources, so what
+ran is always there to read.
 
 ## Concretization and store
 
@@ -226,13 +236,13 @@ binary of the same name must call `command install`.
 a recipe declares wins; `name@version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
 DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
-auxiliary files, source checksums, target arch, and the hashes of all direct
-dependencies. Anything changing anywhere in a package's closure changes its
+auxiliary files, the build-system modules it loads, the evaluator version,
+source checksums, target arch, and the hashes of all direct dependencies. Anything changing anywhere in a package's closure changes its
 hash.
 
 Every package installs into its own prefix `$STORE/<name>-<version>-<hash7>`,
 with metadata in `.shpack/` (spec, dep edges, the hash manifest, the recipe, the
-build log) -- what a future `spack reindex` needs to reconstruct concrete specs
+rendered plan, the build log) -- what a future `spack reindex` needs to reconstruct concrete specs
 from the store. Packages the kaem phase already installed (unhashed
 `$STORE/<name>-<version>` prefixes) are registered in `etc/externals`,
 Spack-`packages.yaml`-style; they resolve like any other candidate and

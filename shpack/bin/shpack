@@ -4,11 +4,11 @@
 # shpack -- a Spack-shaped package manager in portable POSIX shell.
 #
 # shpack drives the post-kaem part of the bootstrap: it concretizes a package
-# DAG from per-package recipes (packages/<name>/package.sh), assigns every
-# node a Merkle hash, installs each package into its own store prefix
-# $STORE/<name>-<version>-<hash7>, and schedules independent builds in
-# parallel through GNU make. Once Python and the rest of Spack's dependencies
-# are bootstrapped, the real Spack takes over the same store.
+# DAG from per-package Starlark recipes (packages/<name>/package.star, evaluated
+# by star), assigns every node a Merkle hash, installs each package into its
+# own store prefix $STORE/<name>-<version>-<hash7>, and schedules independent
+# builds in parallel through GNU make. Once Python and the rest of Spack's
+# dependencies are bootstrapped, the real Spack takes over the same store.
 #
 # Constraint: this code must run under the first bootstrap shell -- dash with
 # coreutils 5.0, sed, make 3.82 and the stage0 sha256sum. In particular there

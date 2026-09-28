@@ -8,45 +8,10 @@
 #   fetch    verify (and if curl exists, download) the distfiles
 #   stage    unpack into $VAR/stage/<id>, cd into the source directory
 #   patch    apply the recipe's declared patches
-#   <phases> the build system's phases (e.g. configure build install),
-#            each overridable by a hook function in the recipe
-#   finalize write $PREFIX/.shpack metadata: spec, deps, manifest, recipe
-#
-# Globals exposed to recipe hooks: name, version, id, stage_dir, package_dir,
-# source_dir, sh, makejobs, file_prefix_map (lowercase: shpack-internal recipe
-# metadata) and the UPPER env-var/config constants tools consume (PREFIX, ARCH,
-# JOBS); plus the helpers prefix_of, triple and replace_bin_sh.
-
-# is_function NAME -> true if NAME is a shell function (dash: "NAME is a
-# shell function"; bash: "NAME is a function").
-is_function() {
-    case $(type "$1" 2>/dev/null) in
-        *function*) return 0 ;;
-    esac
-    return 1
-}
-
-# hook_words NAME -- expand an argument-hook function to its output, or
-# nothing if the recipe does not define it.
-hook_words() {
-    if is_function "$1"; then "$1"; fi
-}
-
-# with_hook_args HOOK CMD [ARG...] -- run CMD with the fixed args followed by
-# the hook's output, one argument per output LINE (so hook-provided arguments
-# may contain spaces, e.g. `AR=tcc -ar`).
-with_hook_args() {
-    local hook
-    hook=$1
-    shift
-    IFS='
-'
-    set -f
-    set -- "$@" $(hook_words "$hook")
-    set +f
-    unset IFS
-    "$@"
-}
+#   plan     `star plan` evaluates the recipe's phases against this node's
+#            build context and renders the actions as $SPEC/build.sh
+#   <phases> source $SPEC/build.sh in this shell
+#   finalize write $PREFIX/.shpack metadata: spec, deps, manifest, recipe, plan
 
 # prefix_of NAME -> the store prefix of a dependency (direct or transitive).
 prefix_of() {
@@ -73,47 +38,15 @@ direct_dep() {
     return 1
 }
 
-# triple [LIBC] [VENDOR] -> the target triple for $ARCH, e.g. x86_64-linux-gnu.
-# LIBC is gnu (default) or musl; VENDOR is omitted by default, pass `unknown`
-# for the -unknown- form the older config.sub vintages in the early chain
-# expect. Covers all four triples the recipes use:
-#   triple gnu          x86_64-linux-gnu          (glibc cap)
-#   triple musl         x86_64-linux-musl         (bison/gawk5/python)
-#   triple musl unknown x86_64-unknown-linux-musl (tcc/gcc4.7 tool layer)
-#   triple gnu unknown  x86_64-unknown-linux-gnu  (math libs, findutils)
-triple() {
-    local cpu libc vendor
-    libc=${1:-gnu}
-    vendor=${2:+$2-}
-    case "$ARCH" in
-        amd64)   cpu=x86_64 ;;
-        aarch64) cpu=aarch64 ;;
-    esac
-    printf '%s\n' "$cpu-${vendor}linux-$libc"
-}
-
-# replace_bin_sh FILE... -- repoint the literal /bin/sh some sources execv/
-# system/popen (musl, tar, gawk, python) at the build shell $sh. Unlike
-# patch-shebangs (which only rewrites #! interpreter lines), these are string
-# literals in the program text, so they need a source edit. The bare /bin/sh
-# pattern covers every form ("/bin/sh", ["/bin/sh", "-c"], ...). For use from a
-# recipe's edit() phase. Paths are relative to the source dir (cwd in edit()).
-replace_bin_sh() {
-    local f
-    for f in "$@"; do
-        sed -i "s|/bin/sh|$sh|g" "$f"
-    done
-}
-
-# --- Starlark recipes ----------------------------------------------------
+# --- the plan ------------------------------------------------------------
 #
-# A package.star recipe does not run here: `star plan` evaluates its phases
-# against a build context (ctx.star, written below) and renders the actions
-# as a plain script ($SPEC/build.sh), which the builder sources in its own
-# shell -- so cd/export persist across phases exactly as with package.sh
-# hooks. The script calls only simple commands plus the two helpers below.
+# A recipe does not run here: `star plan` evaluates its phases against a build
+# context (ctx.star, written below) and renders the actions as a plain script
+# ($SPEC/build.sh), which the builder sources in its own shell -- so cd and
+# export persist from one phase to the next. The script calls only simple
+# commands (through `command`) plus the two helpers below.
 
-# star_sed EXPR FILE... -- sed -i on files that must exist (an unmatched glob
+# star_sed SCRIPT FILE... -- sed -i on files that must exist (an unmatched glob
 # stays literal and fails here, instead of silently editing nothing).
 star_sed() {
     local script f
@@ -286,12 +219,8 @@ do_finalize() {
             >> "$PREFIX/.shpack/deps"
     done
     cp "$SPEC/manifest" "$PREFIX/.shpack/manifest"
-    if is_star_recipe "$name"; then
-        cp "$package_dir/package.star" "$PREFIX/.shpack/package.star"
-        cp "$SPEC/build.sh" "$PREFIX/.shpack/build.sh"
-    else
-        cp "$package_dir/package.sh" "$PREFIX/.shpack/package.sh"
-    fi
+    cp "$package_dir/package.star" "$PREFIX/.shpack/package.star"
+    cp "$SPEC/build.sh" "$PREFIX/.shpack/build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
     # world links via libtool, and they bake build-time paths / dependency
     # orderings that differ across builds. A glob, not find -- shpack core has no
@@ -302,7 +231,6 @@ do_finalize() {
 }
 
 cmd_build_one() {
-    local phase bs
     if [ $# -ne 1 ]; then die "usage: shpack build-one <id>"; fi
     id=$1
     SPEC=$VAR/spec/$id
@@ -318,26 +246,6 @@ cmd_build_one() {
     fi
 
     package_dir=$REPO/$name
-    # package.star: the directive state is already under $VAR/recipe (from
-    # concretization) and the phases come from `star plan` below.
-    # package.sh: load the hooks in-process, with the build system's defaults.
-    if ! is_star_recipe "$name"; then
-        recipe_load "$name"
-        recipe_disarm
-
-        bs=generic
-        if [ -f "$VAR/recipe/$name/build_system" ]; then
-            while read -r when val; do
-                if [ "$when" = - ] || [ "$when" = "$version" ]; then
-                    bs=$val
-                    break
-                fi
-            done < "$VAR/recipe/$name/build_system"
-        fi
-        [ -f "$SHPACK_LIB/build_systems/$bs.sh" ] \
-            || die "$name: unknown build system '$bs'"
-        . "$SHPACK_LIB/build_systems/$bs.sh"
-    fi
 
     # Empty so the inner make inherits the dag.mk jobserver from MAKEFLAGS;
     # an explicit -j would override it and oversubscribe JOBS x JOBS.
@@ -352,7 +260,7 @@ cmd_build_one() {
     # depend on or pollute a real home.
     BUILD_HOME=$VAR/home
     mkdir -p "$BUILD_HOME"
-    # $sh, the build shell (configure/patch-shebangs/replace_bin_sh/SHELL=), is
+    # $sh, the build shell (configure/patch-shebangs/ctx.sh/SHELL=), is
     # the dash the recipe declares -- dash@0.5.12 (bootstrap external) below the
     # glibc dash, the clean dash above it. Every built recipe must declare one:
     # the build always runs make/patch-shebangs, so there is no shell-free build,
@@ -426,33 +334,17 @@ cmd_build_one() {
     # Repoint #!/bin/sh shebangs (build helpers like install-sh, config.guess are
     # exec'd directly) at the store shell, since the sandbox has no host /bin/sh.
     # Whole $stage_dir, not just $source_dir: a `resource` (gcc's in-tree gmp/
-    # mpfr/mpc) sits as a sibling until setup_build_environment relocates it.
+    # mpfr/mpc) sits as a sibling until the recipe's edit() relocates it.
     if [ -n "${PATCH_SHEBANGS:-}" ]; then
         echo "==> $id: patch-shebangs"
         "$PATCH_SHEBANGS" "$sh" "$stage_dir"
     fi
 
-    if is_star_recipe "$name"; then
-        write_ctx > "$SPEC/ctx.star"
-        "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
-            "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
-        mkdir -p "$PREFIX"
-        . "$SPEC/build.sh"
-    else
-        if is_function setup_build_environment; then
-            setup_build_environment
-        fi
-
-        mkdir -p "$PREFIX"
-        for phase in $SHPACK_PHASES; do
-            echo "==> $id: $phase"
-            if is_function "$phase"; then
-                "$phase"
-            else
-                "default_$phase"
-            fi
-        done
-    fi
+    write_ctx > "$SPEC/ctx.star"
+    "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
+        "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
+    mkdir -p "$PREFIX"
+    . "$SPEC/build.sh"
 
     echo "==> $id: finalize"
     do_finalize
