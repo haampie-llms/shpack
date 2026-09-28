@@ -40,6 +40,26 @@ for f in packages/*/package.star; do
     fi
 done
 
+# fetch-distfiles.sh scans package.star textually (there is no star on the
+# host); its scan must agree with what star evaluates.
+if [ -n "${STAR:-}" ]; then
+    for f in packages/*/package.star; do
+        [ -f "$f" ] || continue
+        n=${f%/package.star}
+        n=${n##*/}
+        want=$("$STAR" recipe --repo packages --root . "$n" | awk '
+            /^## / { sec = $2; next }
+            sec == "versions" && $2 != "-" { print $2 "  " $3 "  " $4 }
+            sec == "resources" { print $2 "  " $3 "  " $4 }' | sort)
+        got=$(sh ../fetch-distfiles.sh --scan "$PWD/$f" | sort)
+        if [ "$want" != "$got" ]; then
+            printf 'fetch-distfiles scan of %s disagrees with star:\n%s\n--- vs ---\n%s\n' \
+                "$f" "$got" "$want" >&2
+            bad=1
+        fi
+    done
+fi
+
 # The sh() escape hatch in Starlark recipes: allowed, but counted, so the
 # number only goes down.
 escapes=$(cat packages/*/package.star build_systems/*.star 2>/dev/null \

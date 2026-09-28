@@ -9,7 +9,8 @@
 #   1. locate the tree, apply shpack.conf over the defaults
 #   2. install the stage0 tools into the store, grow tcc_cc + stack_c, check them
 #   3. the static package chain: simple-patch -> tcc-0.9.26 (+ subset musl) ->
-#      full musl -> tcc-0.9.27 -> make -> patch -> gzip -> tar -> sed -> bzip2
+#      full musl -> tcc-0.9.27 (-> sandbox, patch-shebangs, star) -> make ->
+#      patch -> gzip -> tar -> sed -> bzip2
 #      -> coreutils -> dash. One prefix ${STORE}/<name-version> and one PATH
 #      prepend per package, each built by a child kaem on its kaem.run.
 #   4. dash is the first shell: exec it on shpack for the shell phase
@@ -189,6 +190,17 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # builds need no host /bin/sh. Built here for the same reason as sandbox -- as
 # soon as tcc+musl exist.
 pkg=patch-shebangs-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# star: the Starlark interpreter for package.star recipes (see star/). Built
+# here for the same reason as sandbox: tcc+musl is all it needs, and the shell
+# phase evaluates recipes with it from the first concretization on.
+pkg=star-1.0
 PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/${pkg}
 BINDIR=${PREFIX}/bin
