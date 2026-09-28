@@ -42,12 +42,6 @@ for v in ROOT STORE DISTFILES ARCH; do
 done
 BUILDDIR=${BUILDDIR:-$ROOT/tmp}
 
-# The kaem driver exports every variable it assigns, including its own
-# plumbing (the musl LIBDIR/INCDIR it compiled against, the last kaem step's
-# PKG/BINDIR, ...). None of it is configuration for the shell phase, and a
-# build must not see it: zstd's Makefile, for one, installs into $LIBDIR.
-unset SEEDDIR BOOT MESR S0 T M2 LIBC_PREFIX LIBDIR INCDIR pkg PKG BINDIR PREFIX \
-      ARCH_DIR COMMAND SPEC
 BASEPATH=${BASEPATH:-$PATH}
 
 # JOBS: parallel package builds. Default: the number of online CPUs, read the
