@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""Expat 2.8.1 -- a stream-oriented XML parser library written in C. Small
+autotools build."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "Expat 2.8.1 -- a stream-oriented XML parser library written in C. "
-                  + "Small autotools build.",
-    homepage = "https://libexpat.github.io/",
-    license = "MIT",
-)
+homepage = "https://libexpat.github.io/"
+license("MIT")
 
 # GitHub release tarball (R_2_8_1/expat-2.8.1.tar.bz2).
 version(
@@ -18,8 +17,16 @@ version(
 
 build_system("autotools")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # --without-docbook (no doc toolchain) + --enable-static. No libbsd: glibc

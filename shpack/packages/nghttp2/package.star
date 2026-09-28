@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""nghttp2 1.67.1 -- an HTTP/2 and HPACK implementation in C. Only libnghttp2
+is built (--enable-lib-only); the bundled apps would pull in libev and friends.
+"""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "nghttp2 1.67.1 -- an HTTP/2 and HPACK implementation in C. Only "
-                  + "libnghttp2 is built (--enable-lib-only); the bundled apps would "
-                  + "pull in libev and friends.",
-    homepage = "https://nghttp2.org/",
-    license = "MIT",
-)
+homepage = "https://nghttp2.org/"
+license("MIT")
 
 version(
     "1.67.1",
@@ -18,8 +17,16 @@ version(
 
 build_system("autotools")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # Library only: no apps, so none of the optional deps below are needed; the

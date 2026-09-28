@@ -52,7 +52,7 @@ cd musl-1.1.24
 kaem --file ${MSRC}/${ARCH}/apply-full.kaem
 
 # Point musl's system()/popen() at the store dash: the sandbox grants no host
-# /bin/sh, so musl-linked tools that popen (gawk@3.0.4's `print | "cmd"`) must
+# /bin/sh, so musl-linked tools that popen (gawk-boot's `print | "cmd"`) must
 # reach the store shell. The committed .after fragments carry a @STORE@ token;
 # instantiate them with the real store path (mescc-tools-extra replace) before
 # patching. Bootstrap-only libc, never relocated, so absolute is fine.

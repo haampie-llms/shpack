@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: MIT
 
+"""Thin wrapper making crippled gcc-16-boot0 target glibc 2.43: gcc/g++ scripts
+that inject glibc's startfiles, loader and rpath. Sourceless shim."""
+
 load("//build_systems/lib.star", "ld_so")
 
-package(
-    description = "Thin wrapper making crippled gcc-16-boot0 target glibc 2.43: "
-                  + "gcc/g++ scripts that inject glibc's startfiles, loader and rpath. "
-                  + "Sourceless shim.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 # Sourceless: no url/sha256 -> nothing to fetch, builds in the stage dir.
 version("16.1.0")
 
 build_system("generic")
 
-depends_on("gcc-boot2", "glibc", "binutils-boot1")
+depends_on("gcc-boot2", type = ("build", "run"))
+depends_on("glibc")
+depends_on("binutils-boot1", type = ("build", "run"))
 # The gcc/g++ shims are #!$sh scripts, so the clean glibc dash is a runtime dep.
-depends_on("dash")
+depends_on("dash", type = "build")
 
 def install(ctx):
     gcc = ctx.dep("gcc-boot2").prefix

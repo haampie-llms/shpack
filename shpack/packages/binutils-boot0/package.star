@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""GNU binutils 2.30, built by tcc against musl: the bootstrap as/ld/ar for gcc
+4.7 and 9.5 and the early musl tools. Stage 0 of three (binutils-boot1 is
+2.46.0 for the musl world, binutils the final, glibc-linked 2.46.0)."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GNU binutils 2.30, built by tcc against musl: the bootstrap as/ld/ar "
-                  + "for gcc 4.7 and 9.5 and the early musl tools. Stage 0 of three "
-                  + "(binutils-boot1 is 2.46.0 for the musl world, binutils the final, "
-                  + "glibc-linked 2.46.0).",
-    homepage = "https://www.gnu.org/software/binutils/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://www.gnu.org/software/binutils/"
+license("GPL-3.0-or-later")
 
 version(
     "2.30-musl",
@@ -20,8 +18,14 @@ version(
 build_system("autotools")
 
 # tcc + kaem-external musl 1.1.24 + m4; seed make/sed/tar suffice.
-depends_on("tcc", "musl@1.1.24", "gmake", "grep@2.4-musl", "gawk@3.0.4", "diffutils", "m4")
-depends_on("dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("gmake", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("m4", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 # The HOWTO table in bfd/elfnn-aarch64.c has #if/#else inside macro arguments,
 # which tcc 0.9.26's preprocessor lineage cannot handle.

@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""GCC 16.1.0, crippled (--without-headers, no target libc), built by
+gcc-boot1: just enough cc1/libgcc to compile glibc 2.43 (throwaway). Stage 2 of
+three; the shipped, glibc-linked GCC 16 is packages/gcc."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GCC 16.1.0, crippled (--without-headers, no target libc), built by "
-                  + "gcc-boot1: just enough cc1/libgcc to compile glibc 2.43 "
-                  + "(throwaway). Stage 2 of three; the shipped, glibc-linked GCC 16 "
-                  + "is packages/gcc.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 version(
     "16.1.0",
@@ -20,20 +18,21 @@ version(
 build_system("autotools")
 
 # GCC forbids an in-tree build; configure/build/install all happen in _build/.
-build_directory("_build")
+build_directory = "_build"
 
 # binutils-boot1 (2.46) supplies the as/ld it assembles with and bakes into its
 # specs. sed/tar for 16's pax tarball.
-depends_on("gmake", "grep@2.4-musl", "diffutils", "findutils")
-depends_on(
-    "gcc-boot1",
-    "binutils-boot1",
-    "sed@4.9-musl",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-    "gawk@5.3.1",
-)
-depends_on("dash@0.5.12")
+depends_on("gmake", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("gcc-boot1", type = "build")
+depends_on("binutils-boot1", type = ("build", "run"))
+depends_on("sed@4.9-musl", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 # GCC 16's download_prerequisites set (newer gmp/mpfr/mpc), in-tree.
 resource(

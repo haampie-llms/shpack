@@ -65,3 +65,17 @@ member_line() {
     done < "$2"
     return 1
 }
+
+# add_line STRING FILE -- append STRING to FILE unless it is already a line.
+add_line() {
+    member_line "$1" "$2" || printf '%s\n' "$1" >> "$2"
+}
+
+# when_matches WHEN VERSION -> true if a recipe's when (as star writes it: the
+# versions of @=V1,=V2, comma separated, or '-' for all) admits VERSION.
+when_matches() {
+    case ,$1, in
+        ,-,|*",$2,"*) return 0 ;;
+    esac
+    return 1
+}

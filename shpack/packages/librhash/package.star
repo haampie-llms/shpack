@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "LibRHash 1.4.6 -- hash/checksum library (the librhash part of "
-                  + "RHash). Static library + headers only; no OpenSSL backend, no "
-                  + "gettext.",
-    homepage = "https://rhash.sourceforge.net/",
-    license = "0BSD",
-)
+"""LibRHash 1.4.6 -- hash/checksum library (the librhash part of RHash). Static
+library + headers only; no OpenSSL backend, no gettext."""
+
+homepage = "https://rhash.sourceforge.net/"
+license("0BSD")
 
 version(
     "1.4.6",
@@ -17,8 +15,16 @@ version(
 
 build_system("generic")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def install(ctx):
     # Hand-written configure (not autotools); honours $CC.

@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: MIT
 
+"""GCC 4.7 (Linaro 2013.11), grown by tcc against musl 1.1.24: the first C/C++
+compiler of the bootstrap (throwaway). Stage 0 of three: gcc-boot1 (9.5)
+bridges to modern GCC, gcc-boot2 (16.1, crippled) compiles glibc; the shipped
+GCC is packages/gcc."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GCC 4.7 (Linaro 2013.11), grown by tcc against musl 1.1.24: the "
-                  + "first C/C++ compiler of the bootstrap (throwaway). Stage 0 of "
-                  + "three: gcc-boot1 (9.5) bridges to modern GCC, gcc-boot2 (16.1, "
-                  + "crippled) compiles glibc; the shipped GCC is packages/gcc.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 # Linaro snapshot: FSF 4.7 lacks native aarch64.
 version(
@@ -21,12 +20,22 @@ version(
 build_system("autotools")
 
 # GCC forbids an in-tree build; configure/build/install all happen in _build/.
-build_directory("_build")
+build_directory = "_build"
 
 # tcc against musl 1.1.24, external gmp/mpfr/mpc, binutils 2.30.
-depends_on("gmake", "grep@2.4-musl", "diffutils", "findutils")
-depends_on("tcc", "musl@1.1.24", "binutils-boot0", "gmp", "mpfr", "mpc", "m4", "gawk@3.0.4")
-depends_on("dash@0.5.12")
+depends_on("gmake", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("binutils-boot0", type = ("build", "run"))
+depends_on("gmp")
+depends_on("mpfr")
+depends_on("mpc")
+depends_on("m4", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 # libiberty's C_alloca conflicts with musl's alloca; rename it (same fix as Guix).
 patch("0001-alloca.patch")

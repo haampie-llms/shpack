@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""re2c 3.0 -- lexer generator. Build dependency of clingo (turns *.re into
+C++). 3.0 (not 3.1+) because 3.1's configure hard-requires a Python >=3.7
+interpreter we don't have yet; 3.0 only probes for it."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "re2c 3.0 -- lexer generator. Build dependency of clingo (turns "
-                  + "*.re into C++). 3.0 (not 3.1+) because 3.1's configure "
-                  + "hard-requires a Python >=3.7 interpreter we don't have yet; 3.0 "
-                  + "only probes for it.",
-    homepage = "https://re2c.org/",
-    license = "Public-Domain",
-)
+homepage = "https://re2c.org/"
+license("Public-Domain")
 
 # 3.0 self-bootstraps its own lexer/parser from the shipped generated sources, so
 # it needs no host re2c/bison/python -- a plain C++ compiler suffices.
@@ -21,8 +19,16 @@ version(
 
 build_system("autotools")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # gcc/g++ resolve to the wrapper via the composed PATH. Explicit triple:

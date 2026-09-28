@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""OpenSSL 3.6.1 -- TLS/crypto library. Provides CPython's _ssl, which Spack
+imports unconditionally (spack.util.web -> ssl), so it's required even for
+offline 'spack spec'."""
+
 load("//build_systems/lib.star", "cpu")
 
-package(
-    description = "OpenSSL 3.6.1 -- TLS/crypto library. Provides CPython's _ssl, "
-                  + "which Spack imports unconditionally (spack.util.web -> ssl), so "
-                  + "it's required even for offline 'spack spec'.",
-    homepage = "https://www.openssl.org/",
-    license = "Apache-2.0",
-)
+homepage = "https://www.openssl.org/"
+license("Apache-2.0")
 
 version(
     "3.6.1",
@@ -21,8 +20,19 @@ build_system("generic")
 # perl drives Configure and the build generators; zlib-ng for compression.
 # ca-certificates is the Mozilla bundle dropped into OPENSSLDIR (see install) so
 # the default trust store works with no SSL_CERT_FILE.
-depends_on("compiler-wrapper", "perl", "zlib-ng", "gmake", "ca-certificates")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("perl", type = "build")
+depends_on("zlib-ng")
+depends_on("gmake", type = "build")
+depends_on("ca-certificates", type = ("build", "run"))
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def install(ctx):
     perl = ctx.dep("perl").prefix

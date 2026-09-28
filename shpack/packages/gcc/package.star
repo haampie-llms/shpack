@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""Native aarch64 GCC 16.1.0 -- the final, shared compiler of the bootstrap.
+Built by gcc-boot-wrapper against glibc 2.43 + binutils, --enable-shared,
+threads=posix, real C++ EH."""
+
 load("//build_systems/lib.star", "ld_so", "triple")
 
-package(
-    description = "Native aarch64 GCC 16.1.0 -- the final, shared compiler of the "
-                  + "bootstrap. Built by gcc-boot-wrapper against glibc 2.43 + "
-                  + "binutils, --enable-shared, threads=posix, real C++ EH.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 # The shared, glibc-linked production GCC 16. Same source as gcc-boot2;
 # the difference is how it's built (wrapped boot0 + glibc + binutils).
@@ -23,24 +22,22 @@ build_system("autotools")
 # Built by gcc-boot-wrapper against glibc 2.43, binutils (as/ld baked in),
 # libstdcxx-boot1 (static libstdc++.a for the build tools). linux-headers:
 # autoconf CPP sanity check (also symlinked into glibc's include).
-depends_on(
-    "gcc-boot-wrapper",
-    "glibc",
-    "binutils",
-    "libstdcxx-boot1",
-    "linux-headers",
-    "zlib-ng@2.3.3-boot",
-    "zstd@1.5.7-boot",
-    "gmake",
-    "sed@4.9-musl",
-    "grep@2.4-musl",
-    "gawk@5.3.1",
-    "diffutils",
-    "findutils",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-)
-depends_on("dash")
+depends_on("gcc-boot-wrapper", type = "build")
+depends_on("glibc")
+depends_on("binutils", type = ("build", "run"))
+depends_on("libstdcxx-boot1")
+depends_on("linux-headers")
+depends_on("zlib-ng@2.3.3-boot")
+depends_on("zstd@1.5.7-boot")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 # Same in-tree gmp/mpfr/mpc as gcc-boot2 (GCC 16's prerequisite set).
 resource(

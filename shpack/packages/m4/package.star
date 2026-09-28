@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "GNU m4 macro processor (gmp's configure hard-requires it)",
-    homepage = "https://www.gnu.org/software/m4/",
-    license = "GPL-2.0-or-later",
-)
+"""GNU m4 macro processor (gmp's configure hard-requires it)"""
+
+homepage = "https://www.gnu.org/software/m4/"
+license("GPL-2.0-or-later")
 
 version(
     "1.4.7",
@@ -14,5 +13,7 @@ version(
 
 build_system("makefile")
 
-depends_on("tcc", "musl@1.1.24", "grep@2.4-musl")
-depends_on("dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("grep-boot", type = "build")
+depends_on("dash@0.5.12", type = "build")

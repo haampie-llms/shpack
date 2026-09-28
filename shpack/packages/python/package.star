@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""Python 3.8.20, built by the gcc-9.5 bridge against static musl -- glibc 2.43
+needs python3 (scripts/gen-as-const.py and friends)."""
+
 load("//build_systems/lib.star", "cpu", "replace_bin_sh", "triple")
 
-package(
-    description = "Python 3.8.20, built by the gcc-9.5 bridge against static musl -- "
-                  + "glibc 2.43 needs python3 (scripts/gen-as-const.py and friends).",
-    homepage = "https://www.python.org/",
-    license = "Python-2.0",
-)
+homepage = "https://www.python.org/"
+license("Python-2.0")
 
 # 3.9 removed --without-threads; static musl here has no pthreads.
 version(
@@ -18,15 +17,17 @@ version(
 
 build_system("generic")
 
-depends_on(
-    "gcc-boot1",
-    "binutils-boot0",
-    "gmake",
-    "sed@4.9-musl",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-)
-depends_on("dash@0.5.12")
+depends_on("gcc-boot1", type = "build")
+depends_on("binutils-boot0", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 def edit(ctx):
     # subprocess(shell=True) hardcodes ["/bin/sh", "-c"] in pure Python, which

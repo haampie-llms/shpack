@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""GNU findutils: find is needed by gcc's libstdc++ libtool to merge the
+convenience archives into the static libstdc++.a"""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GNU findutils: find is needed by gcc's libstdc++ libtool to merge "
-                  + "the convenience archives into the static libstdc++.a",
-    homepage = "https://www.gnu.org/software/findutils/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://www.gnu.org/software/findutils/"
+license("GPL-3.0-or-later")
 
 version(
     "4.2.33",
@@ -17,8 +16,10 @@ version(
 
 build_system("autotools")
 
-depends_on("tcc", "musl@1.1.24", "grep@2.4-musl")
-depends_on("dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("grep-boot", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 # The release tarball ships a working pregenerated ./configure; no autoreconf.
 def configure_args(ctx):

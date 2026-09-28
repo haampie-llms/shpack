@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""libarchive 3.8.7 -- multi-format archive/compression library. Static
+libarchive only; zlib/bzip2/xz/zstd/openssl filters, no CLI tools."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "libarchive 3.8.7 -- multi-format archive/compression library. "
-                  + "Static libarchive only; zlib/bzip2/xz/zstd/openssl filters, no CLI "
-                  + "tools.",
-    homepage = "https://www.libarchive.org/",
-    license = "BSD-2-Clause",
-)
+homepage = "https://www.libarchive.org/"
+license("BSD-2-Clause")
 
 version(
     "3.8.7",
@@ -18,8 +16,20 @@ version(
 
 build_system("autotools")
 
-depends_on("compiler-wrapper", "gmake", "zlib-ng", "bzip2", "xz", "zstd", "openssl")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("zlib-ng")
+depends_on("bzip2")
+depends_on("xz")
+depends_on("zstd")
+depends_on("openssl")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # zlib/bzip2/lzma/zstd/openssl filters on, everything else off, no tools.

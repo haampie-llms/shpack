@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""GCC 9.5, built by gcc-boot0's g++ against musl 1.2.5: the bridge to modern
+GCC (throwaway). Stage 1 of three; mature C++17, builds cleanly on musl."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GCC 9.5, built by gcc-boot0's g++ against musl 1.2.5: the bridge to "
-                  + "modern GCC (throwaway). Stage 1 of three; mature C++17, builds "
-                  + "cleanly on musl.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 version(
     "9.5.0",
@@ -19,22 +17,24 @@ version(
 build_system("autotools")
 
 # GCC forbids an in-tree build; configure/build/install all happen in _build/.
-build_directory("_build")
+build_directory = "_build"
 
 # musl 1.2.5 sysroot, kernel headers, binutils 2.30. gmp/mpfr/mpc are in-tree
 # resources (4.3.2/2.4.2 are too old).
-depends_on("gmake", "grep@2.4-musl", "diffutils", "findutils")
-depends_on(
-    "gcc-boot0",
-    "musl@1.2.5",
-    "linux-headers",
-    "binutils-boot0",
-    "m4@1.4.7",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-    "gawk@3.0.4",
-)
-depends_on("dash@0.5.12")
+depends_on("gmake", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("gcc-boot0", type = "build")
+depends_on("musl@1.2.5")
+depends_on("linux-headers")
+depends_on("binutils-boot0", type = ("build", "run"))
+depends_on("m4@1.4.7", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 # GCC 9.5's download_prerequisites set, in-tree as gmp/ mpfr/ mpc/ for
 # auto-detection. ISL omitted (Graphite only; --without-isl).

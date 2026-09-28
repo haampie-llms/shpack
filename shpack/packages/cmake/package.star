@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""CMake 3.31.11 -- build-system generator. Bootstrapped from source against
+store libraries (curl/openssl/libarchive/...); only the bundled cppdap
+(cmake-only build) stays vendored. No ncurses dialog."""
+
 load("//build_systems/lib.star", "replace_bin_sh")
 
-package(
-    description = "CMake 3.31.11 -- build-system generator. Bootstrapped from source "
-                  + "against store libraries (curl/openssl/libarchive/...); only the "
-                  + "bundled cppdap (cmake-only build) stays vendored. No ncurses "
-                  + "dialog.",
-    homepage = "https://cmake.org/",
-    license = "BSD-3-Clause",
-)
+homepage = "https://cmake.org/"
+license("BSD-3-Clause")
 
 version(
     "3.31.11",
@@ -19,23 +17,27 @@ version(
 
 build_system("generic")
 
-depends_on(
-    "compiler-wrapper",
-    "gmake",
-    "openssl",
-    "curl",
-    "zlib-ng",
-    "expat",
-    "bzip2",
-    "xz",
-    "zstd",
-    "nghttp2",
-    "libarchive",
-    "libuv",
-    "librhash",
-    "jsoncpp",
-)
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("openssl")
+depends_on("curl")
+depends_on("zlib-ng")
+depends_on("expat")
+depends_on("bzip2")
+depends_on("xz")
+depends_on("zstd")
+depends_on("nghttp2")
+depends_on("libarchive")
+depends_on("libuv")
+depends_on("librhash")
+depends_on("jsoncpp")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("dash", type = "build")
 
 def edit(ctx):
     # cmake hardcodes /bin/sh (the SHELL of generated makefiles, and its

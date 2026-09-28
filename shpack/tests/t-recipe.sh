@@ -5,7 +5,10 @@
 . "$(dirname "$0")/common.sh"
 
 mkstar liba <<'EOF2'
-package(description = "toy leaf library")
+"""toy leaf
+   library"""
+homepage = "https://example.invalid/liba"
+license("MIT")
 version("1.0")
 build_system("generic")
 depends_on("dash")
@@ -14,18 +17,19 @@ def install(ctx):
 EOF2
 
 mkstar libb <<'EOF2'
-package(description = "toy mid-layer, two versions")
+"""toy mid-layer, two versions"""
 version("2.1")
 version("2.0")
 build_system("generic")
-depends_on("liba", "dash")
+depends_on("liba")
+depends_on("dash")
 depends_on("cdep", when = "@=2.0")
 def install(ctx):
     return []
 EOF2
 
 mkstar cdep <<'EOF2'
-package(description = "only libb@2.0 depends on me")
+"""only libb@2.0 depends on me"""
 version("1.0")
 build_system("generic")
 depends_on("dash")
@@ -34,10 +38,13 @@ def install(ctx):
 EOF2
 
 mkstar tool <<'EOF2'
-package(description = "toy root")
+"""toy root"""
 version("0.5")
 build_system("generic")
-depends_on("libb@2.1", "liba", "ext", "dash")
+depends_on("libb@2.1")
+depends_on("liba")
+depends_on("ext")
+depends_on("dash")
 def install(ctx):
     return []
 EOF2
@@ -52,9 +59,11 @@ assert_eq "$(index_field liba 4)" built "liba kind"
 # the state files lib/repo.sh documents
 assert_eq "$(cat "$SHPACK_VAR/recipe/libb/versions")" "2.1 - - -
 2.0 - - -" "versions state"
-assert_contains "$SHPACK_VAR/recipe/libb/deps" "2.0 cdep"
-assert_contains "$SHPACK_VAR/recipe/libb/deps" "- liba"
+assert_contains "$SHPACK_VAR/recipe/libb/deps" "2.0 build,link cdep"
+assert_contains "$SHPACK_VAR/recipe/libb/deps" "- build,link liba"
 assert_eq "$(cat "$SHPACK_VAR/recipe/liba/description")" "toy leaf library" "description state"
+assert_eq "$(cat "$SHPACK_VAR/recipe/liba/homepage")" "https://example.invalid/liba" "homepage state"
+assert_eq "$(cat "$SHPACK_VAR/recipe/liba/license")" "- MIT" "license state"
 # when="@=2.0" only applies to 2.0: 2.1 has no cdep
 case $(cat "$SHPACK_VAR/topo") in
     *cdep*) fail "cdep must not be in libb@2.1's closure" ;;
@@ -90,7 +99,6 @@ shpack concretize tool > /dev/null
 
 # Recipe errors surface at concretization.
 mkstar bad <<'EOF2'
-package()
 version("1.0")
 depends_on("dash", when = "@1.0")
 EOF2
@@ -99,8 +107,24 @@ if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
 fi
 assert_contains "$TESTDIR/bad.log" "use @=VERSION"
 
+# One spec per depends_on, and only Spack's dependency types.
+mkstar bad <<'EOF2'
+version("1.0")
+depends_on("dash", "liba")
+EOF2
+if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
+    fail "depends_on with two specs must be rejected"
+fi
+mkstar bad <<'EOF2'
+version("1.0")
+depends_on("dash", type = "runtime")
+EOF2
+if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
+    fail "an unknown dependency type must be rejected"
+fi
+assert_contains "$TESTDIR/bad.log" "want build, link, run or test"
+
 mkstar late <<'EOF2'
-package()
 version("1.0")
 build_system("generic")
 depends_on("dash")

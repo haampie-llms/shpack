@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: MIT
 
+"""CPython 3.14.5 -- the glibc-linked, shared production Python that runs
+clingo and Spack. Distinct from the musl 'python' 3.5.9 used only to bootstrap
+glibc."""
+
 load("//build_systems/autotools.star", autotools_build = "build")
 load("//build_systems/lib.star", "cpu", "replace_bin_sh", "triple", "uname_shim")
 
-package(
-    description = "CPython 3.14.5 -- the glibc-linked, shared production Python that "
-                  + "runs clingo and Spack. Distinct from the musl 'python' 3.5.9 used "
-                  + "only to bootstrap glibc.",
-    homepage = "https://www.python.org/",
-    license = "Python-2.0",
-)
+homepage = "https://www.python.org/"
+license("Python-2.0")
 
 version(
     "3.14.5",
@@ -22,17 +21,21 @@ build_system("autotools")
 # Backs stdlib modules: zlib-ng -> zlib/gzip/zipfile, libffi -> _ctypes, openssl
 # -> _ssl, bzip2/xz/zstd -> _bz2/_lzma/_zstd. configure auto-detects each from
 # the wrapper's search path.
-depends_on(
-    "compiler-wrapper",
-    "zlib-ng",
-    "libffi",
-    "openssl",
-    "bzip2",
-    "xz",
-    "zstd",
-    "gmake",
-)
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("zlib-ng")
+depends_on("libffi")
+depends_on("openssl")
+depends_on("bzip2")
+depends_on("xz")
+depends_on("zstd")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("dash", type = "build")
 
 def edit(ctx):
     # No uname: configure leaves ac_sys_system empty and LDSHARED falls back to

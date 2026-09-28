@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""curl 8.20.0 -- the curl CLI and libcurl, a URL transfer library. TLS via
+OpenSSL with the Mozilla CA bundle; HTTP/2 via nghttp2; DEFLATE via zlib. All
+other optional backends are turned off."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "curl 8.20.0 -- the curl CLI and libcurl, a URL transfer library. "
-                  + "TLS via OpenSSL with the Mozilla CA bundle; HTTP/2 via nghttp2; "
-                  + "DEFLATE via zlib. All other optional backends are turned off.",
-    homepage = "https://curl.se/",
-    license = "curl",
-)
+homepage = "https://curl.se/"
+license("curl")
 
 version(
     "8.20.0",
@@ -21,15 +20,20 @@ build_system("autotools")
 # openssl = TLS backend; zlib-ng = transfer-encoding inflate; nghttp2 = HTTP/2;
 # ca-certificates = the on-disk trust store baked in as the default CA bundle.
 # compiler-wrapper injects -I/-L/-rpath for the three libraries.
-depends_on(
-    "compiler-wrapper",
-    "openssl",
-    "zlib-ng",
-    "nghttp2",
-    "ca-certificates",
-    "gmake",
-)
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("openssl")
+depends_on("zlib-ng")
+depends_on("nghttp2")
+depends_on("ca-certificates", type = ("build", "run"))
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # Explicit glibc triple (no uname/config.guess in the sandbox). Dep prefixes
