@@ -2,7 +2,7 @@
 #
 # Shared test fixture: a scratch shpack world (repo, store, distfiles,
 # config, externals) in a temp dir, plus tiny assertion helpers. Each test
-# sources this and builds its own toy packages with mkpkg.
+# sources this and builds its own toy packages with mkstar.
 
 set -e
 
@@ -59,12 +59,6 @@ mkstar() {
 
 shpack() {
     sh "$TESTROOT/bin/shpack" "$@"
-}
-
-# mkpkg NAME -- create a package dir, recipe body on stdin.
-mkpkg() {
-    mkdir -p "$SHPACK_REPO/$1"
-    cat > "$SHPACK_REPO/$1/package.sh"
 }
 
 fail() {

@@ -11,36 +11,45 @@ echo "payload" > "$TESTDIR/src/tarpkg-1.0/hello.txt"
 sha=$(sha256sum "$TESTDIR/distfiles/tarpkg-1.0.tar.gz")
 sha=${sha%% *}
 
-mkpkg liba <<'EOF'
-version 1.0
-build_system generic
-depends_on dash
-install() {
-    mkdir -p "$PREFIX/bin"
-    printf '#!/bin/sh\necho liba-says-hi\n' > "$PREFIX/bin/liba-cmd"
-    chmod 755 "$PREFIX/bin/liba-cmd"
-}
+mkstar liba <<'EOF'
+package()
+version("1.0")
+build_system("generic")
+depends_on("dash")
+def install(ctx):
+    return [
+        mkdir(ctx.prefix + "/bin"),
+        write_file(ctx.prefix + "/bin/liba-cmd", "#!" + ctx.sh + "\necho liba-says-hi\n", mode = "755"),
+    ]
 EOF
 
 # gmake stand-in: exercises SHPACK_BOOTSTRAP_MAKE's two-stage scheduling.
-mkpkg gmake <<'EOF'
-version 4.4.1
-build_system generic
-depends_on liba dash
-install() { mkdir -p "$PREFIX/bin"; }
+mkstar gmake <<'EOF'
+package()
+version("4.4.1")
+build_system("generic")
+depends_on("liba", "dash")
+def install(ctx):
+    return [mkdir(ctx.prefix + "/bin")]
 EOF
 
-mkpkg tarpkg <<EOF
-version 1.0 sha256=$sha url=http://example.invalid/tarpkg-1.0.tar.gz
-build_system generic
-depends_on liba gmake@4.4.1 dash
-install() {
-    # Runs inside the unpacked source dir; the dep's bin must be on PATH.
-    [ -f hello.txt ] || die "not in the source dir"
-    liba-cmd > /dev/null || die "dep bin not on PATH"
-    mkdir -p "\$PREFIX/share"
-    cp hello.txt "\$PREFIX/share/"
-}
+mkstar tarpkg <<EOF
+package()
+version(
+    "1.0",
+    sha256 = "$sha",
+    url = "http://example.invalid/tarpkg-1.0.tar.gz",
+)
+build_system("generic")
+depends_on("liba", "gmake@4.4.1", "dash")
+def install(ctx):
+    return [
+        # Runs inside the unpacked source dir; the dep's bin must be on PATH.
+        run("test", "-f", "hello.txt"),
+        run("liba-cmd", stdout = "/dev/null"),
+        mkdir(ctx.prefix + "/share"),
+        copy("hello.txt", ctx.prefix + "/share/"),
+    ]
 EOF
 
 export SHPACK_BOOTSTRAP_MAKE=gmake@4.4.1
@@ -56,7 +65,8 @@ assert_file "$aprefix/bin/liba-cmd"
 assert_file "$tprefix/share/hello.txt"
 assert_file "$tprefix/.shpack/spec"
 assert_file "$tprefix/.shpack/manifest"
-assert_file "$tprefix/.shpack/package.sh"
+assert_file "$tprefix/.shpack/package.star"
+assert_file "$tprefix/.shpack/build.sh"
 assert_file "$tprefix/.shpack/build.log"
 assert_contains "$tprefix/.shpack/spec" "name tarpkg"
 assert_contains "$tprefix/.shpack/deps" "liba-1.0-$ah"
@@ -81,11 +91,18 @@ shpack install tarpkg > "$TESTDIR/install3.log" 2>&1 \
 assert_contains "$SHPACK_VAR/logs/tarpkg-1.0.log" "already installed"
 
 # Corrupt distfile is rejected.
-mkpkg badpkg <<EOF
-version 1.0 sha256=0000000000000000000000000000000000000000000000000000000000000000 fname=tarpkg-1.0.tar.gz url=-
-build_system generic
-depends_on dash
-install() { :; }
+mkstar badpkg <<EOF
+package()
+version(
+    "1.0",
+    sha256 = "0000000000000000000000000000000000000000000000000000000000000000",
+    url = "-",
+    fname = "tarpkg-1.0.tar.gz",
+)
+build_system("generic")
+depends_on("dash")
+def install(ctx):
+    return []
 EOF
 if shpack install badpkg > /dev/null 2>&1; then
     fail "expected bad checksum to fail the build"

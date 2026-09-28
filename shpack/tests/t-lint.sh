@@ -9,7 +9,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 bad=0
-for f in bin/shpack lib/*.sh lib/build_systems/*.sh; do
+for f in bin/shpack lib/*.sh; do
     # Strip comment lines and the usage text (which mentions `find`), then
     # look for the banned words in command-ish positions.
     if sed -e '/^[ \t]*#/d' -e '/^usage() {/,/^}/d' "$f" \
@@ -21,21 +21,15 @@ done
 
 # Every built recipe must declare a shell dep: builder.sh requires it (the build
 # always runs make/patch-shebangs) and there is no ambient-shell fallback.
-for f in packages/*/package.sh; do
-    [ -f "$f" ] || continue
-    if ! grep -qE '^depends_on .*\bdash\b' "$f"; then
-        echo "no dash dependency in $f" >&2
-        bad=1
-    fi
-done
 for f in packages/*/package.star; do
-    [ -f "$f" ] || continue
     if ! grep -qE '^depends_on\(.*"dash(@[^"]*)?"' "$f"; then
         echo "no dash dependency in $f" >&2
         bad=1
     fi
-    if [ -f "${f%.star}.sh" ]; then
-        echo "${f%/*} has both package.star and package.sh" >&2
+done
+for d in packages/*/; do
+    if [ ! -f "$d/package.star" ]; then
+        echo "no package.star in $d" >&2
         bad=1
     fi
 done
