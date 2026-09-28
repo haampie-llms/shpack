@@ -18,7 +18,7 @@ depends_on(
     "tcc",
     "musl@1.1.24",
     "gmake",
-    "binutils@2.30-musl",
+    "binutils-boot0",
     "m4",
     "grep@2.4-musl",
     "gawk@3.0.4",

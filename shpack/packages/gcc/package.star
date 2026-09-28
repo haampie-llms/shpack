@@ -10,7 +10,7 @@ package(
     license = "GPL-3.0-or-later",
 )
 
-# The shared, glibc-linked production GCC 16. Same source as gcc-boot@16.1.0;
+# The shared, glibc-linked production GCC 16. Same source as gcc-boot2;
 # the difference is how it's built (wrapped boot0 + glibc + binutils).
 version(
     "16.1.0",
@@ -42,7 +42,7 @@ depends_on(
 )
 depends_on("dash")
 
-# Same in-tree gmp/mpfr/mpc as gcc-boot@16.1.0 (GCC 16's prerequisite set).
+# Same in-tree gmp/mpfr/mpc as gcc-boot2 (GCC 16's prerequisite set).
 resource(
     url = "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2",
     sha256 = "ac28211a7cfb609bae2e2c8d6058d66c8fe96434f740cf6fe2e47b000d1c20cb",

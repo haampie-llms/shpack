@@ -23,4 +23,7 @@ sed@4.0.9       sed-4.0.9
 bzip2@1.0.8-musl bzip2-1.0.8
 coreutils@5.0   coreutils-5.0
 dash@0.5.12     dash-0.5.12
+# The same bootstrap dash under a name of its own: the build shell of the
+# dash recipe, which cannot depend on dash (Spack forbids self-dependencies).
+dash-boot@0.5.12 dash-0.5.12
 star@1.0        star-1.0

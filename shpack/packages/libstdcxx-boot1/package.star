@@ -4,13 +4,13 @@ load("//build_systems/lib.star", "triple")
 
 package(
     description = "Intermediate aarch64 libstdc++ (static-only) from GCC 16 source. "
-                  + "gcc-boot@16.1.0 was built --disable-libstdc++-v3, but binutils "
+                  + "gcc-boot2 was built --disable-libstdc++-v3, but binutils "
                   + "(gprofng) and gcc's build tools need to link one.",
     homepage = "https://gcc.gnu.org/",
     license = "GPL-3.0-or-later",
 )
 
-# Same GCC 16 source as gcc-boot@16.1.0 / gcc; only libstdc++-v3 is configured.
+# Same GCC 16 source as gcc-boot2 / gcc; only libstdc++-v3 is configured.
 version(
     "16.1.0",
     sha256 = "50efb4d94c3397aff3b0d61a5abd748b4dd31d9d3f2ab7be05b171d36a510f79",

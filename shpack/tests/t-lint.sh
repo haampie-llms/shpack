@@ -22,7 +22,7 @@ done
 # Every built recipe must declare a shell dep: builder.sh requires it (the build
 # always runs make/patch-shebangs) and there is no ambient-shell fallback.
 for f in packages/*/package.star; do
-    if ! grep -qE '^depends_on\(.*"dash(@[^"]*)?"' "$f"; then
+    if ! grep -qE '^depends_on\(.*"dash(-boot)?(@[^"]*)?"' "$f"; then
         echo "no dash dependency in $f" >&2
         bad=1
     fi

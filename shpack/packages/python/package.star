@@ -19,8 +19,8 @@ version(
 build_system("generic")
 
 depends_on(
-    "gcc-boot@9.5.0",
-    "binutils@2.30-musl",
+    "gcc-boot1",
+    "binutils-boot0",
     "gmake",
     "sed@4.9-musl",
     "tar@1.35-musl",
@@ -35,7 +35,7 @@ def edit(ctx):
     return [replace_bin_sh(ctx, "Lib/subprocess.py")]
 
 def setup_build_environment(ctx):
-    gcc = ctx.dep("gcc-boot").prefix
+    gcc = ctx.dep("gcc-boot1").prefix
     return [
         setenv("CC", gcc + "/bin/gcc"),
         setenv("CXX", gcc + "/bin/g++"),
@@ -80,7 +80,7 @@ def install(ctx):
             "./configure",
             "CONFIG_SHELL=" + ctx.sh,
             "SHELL=" + ctx.sh,
-            "CC=" + ctx.dep("gcc-boot").prefix + "/bin/gcc",
+            "CC=" + ctx.dep("gcc-boot1").prefix + "/bin/gcc",
             "CFLAGS=-O2",
             "OPT=-DNDEBUG -fwrapv",
             "--build=" + t,

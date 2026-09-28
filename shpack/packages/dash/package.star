@@ -23,12 +23,14 @@ build_system("autotools")
 # startfiles + libc.a via -B, not the dynamic loader/rpath a wrapper injects.
 # glibc here is the throwaway 2.43-boot (the final 2.43 depends on this dash, so
 # linking it against 2.43 would be a cycle). binutils provides as/ld.
-depends_on("gcc-boot", "glibc@2.43-boot", "binutils@2.46.0-musl", "gmake")
-depends_on("dash@0.5.12")
+depends_on("gcc-boot2", "glibc@2.43-boot", "binutils-boot1", "gmake")
+# Built with the bootstrap dash; `dash-boot` names that kaem-phase prefix,
+# since a package cannot depend on (another version of) itself in Spack.
+depends_on("dash-boot")
 
 def configure_args(ctx):
     t = triple(ctx)
-    cc = ctx.dep("gcc-boot").prefix + "/bin/gcc"
+    cc = ctx.dep("gcc-boot2").prefix + "/bin/gcc"
     gl = ctx.dep("glibc").prefix
     # Static: -B finds crt*.o + libc.a, -I glibc's headers. No NLS/printf-builtin
     # frills -- this is a build-time /bin/sh, not a user shell.

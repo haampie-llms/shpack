@@ -17,11 +17,11 @@ version(
 
 build_system("autotools")
 
-# Built by gcc 9.5 in the musl world (binutils@2.30-musl as/ld). m4 is a RUN dep:
+# Built by gcc 9.5 in the musl world (binutils-boot0 as/ld). m4 is a RUN dep:
 # bison shells out to it to expand skeletons; seed m4@1.4.7 meets `m4 >= 1.4.6`.
 depends_on(
-    "gcc-boot@9.5.0",
-    "binutils@2.30-musl",
+    "gcc-boot1",
+    "binutils-boot0",
     "gmake",
     "sed@4.9-musl",
     "tar@1.35-musl",
@@ -40,7 +40,7 @@ def configure_args(ctx):
     # DWARF comp_dir (see builder.sh).
     t = triple(ctx, "musl")
     return [
-        "CC=" + ctx.dep("gcc-boot").prefix + "/bin/gcc",
+        "CC=" + ctx.dep("gcc-boot1").prefix + "/bin/gcc",
         "CFLAGS=-O2",
         "--build=" + t,
         "--host=" + t,
