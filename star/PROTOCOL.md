@@ -104,6 +104,36 @@ match something.
 | `substitute(files, old, new)` | replace every occurrence of the literal `old`, line by line |
 | `filter_file(files, regex, repl)` | replace every match of `regex` (the portable subset: literals, `.`, `*` after an atom, `^` first, `$` last, `[...]`, backslash-escaped metacharacters; `+ ? ( ) { } \|` must be escaped) with the literal `repl`, line by line |
 
+## Hosts
+
+A host executes plans. Two hosts give byte-identical installs of the same
+recipe (up to the store paths in them) when they agree on the following. This
+is what shpack's builder does, and what Spack's adapter (`spack.star_package`)
+reproduces:
+
+- **Resolution.** `name@version` pins that exact version. A bare name means
+  the first version its recipe declares; a recipe always beats an external of
+  the same name. A package never depends on another version of itself, so
+  bootstrap stages get names of their own (`gcc-boot0`, `gcc-boot1`, ...).
+- **Staging.** The main archive, then the resources in declaration order,
+  are unpacked side by side into the stage directory with the compressor and
+  `tar` on the build PATH. `source_dir` is the first directory in the stage,
+  in sorted order. The recipe's patches are then applied in order with
+  `patch -p<level>` from the build PATH, and `#!` interpreters in the whole
+  stage are rewritten to `ctx.sh`.
+- **Environment.** Nothing is inherited from the invoking process:
+  - `PATH` is the prefix's own `bin`, then the `bin` of every dependency in
+    the reverse of a DFS post-order over the declared dependencies, then the
+    host's base PATH.
+  - `SOURCE_DATE_EPOCH=0`; `SHELL`, `sh` and `MAKEFLAGS` carry `ctx.sh`;
+    `HOME` and `TMPDIR` are build scratch.
+  - Also set: `PREFIX`, `ARCH`, `JOBS`, `makejobs`, the compiler-wrapper
+    variables, and `PKG_CONFIG_PATH`.
+- **Finalization.** `lib/*.la` and `lib64/*.la` are removed. Modes are
+  normalized: directories 755, files 644, or 755 if any execute bit is set.
+- **Order.** `ctx.deps` is the direct dependencies, then the closure sorted
+  by `name-version`, first match winning.
+
 ## Canonical forms
 
 `star recipe --format json` and `star plan --format json` print the two
