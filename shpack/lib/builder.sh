@@ -349,6 +349,9 @@ cmd_build_one() {
     "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
         "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
     mkdir -p "$PREFIX"
+    # The environment the plan runs in, for the record (and for other hosts
+    # of the same recipe to compare against).
+    export -p > "$SPEC/env"
     . "$SPEC/build.sh"
 
     echo "==> $id: finalize"
