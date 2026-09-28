@@ -17,10 +17,11 @@ int host_main(int argc, char **argv);   /* host.c */
 
 static void usage(void)
 {
-    fputs("usage: star run FILE\n"
+    fputs("usage: star version\n"
+          "       star run FILE\n"
           "       star test [--xfail LIST] FILE...\n"
-          "       star recipe --root DIR [--format shpack|json] [--out DIR] NAME\n"
-          "       star plan --root DIR --ctx FILE [--format sh|json] NAME\n", stderr);
+          "       star recipe --repo DIR --root DIR [--format shpack|json] [--out DIR] NAME\n"
+          "       star plan --repo DIR --root DIR --ctx FILE [--format sh|json] NAME\n", stderr);
     exit(2);
 }
 
@@ -405,6 +406,10 @@ int main(int argc, char **argv)
     universe_init();
     if (argc < 2)
         usage();
+    if (strcmp(argv[1], "version") == 0) {
+        puts("star 1.0");
+        return 0;
+    }
     if (strcmp(argv[1], "run") == 0)
         return cmd_run(argc - 2, argv + 2);
     if (strcmp(argv[1], "test") == 0)

@@ -31,3 +31,8 @@ SANDBOX=${SANDBOX-$STORE/sandbox-1.0/bin/sandbox}
 # shell ($sh, its declared dash) before building, since the sandbox has no host
 # /bin/sh for install-sh/config.guess and friends. Empty skips it.
 PATCH_SHEBANGS=${PATCH_SHEBANGS-$STORE/patch-shebangs-1.0/bin/patch-shebangs}
+
+# The Starlark evaluator for package.star recipes (kaem phase, built right
+# after tcc+musl). `star recipe` writes a recipe's directive state (the same
+# files the package.sh directives write), `star plan` renders its build.
+STAR=${STAR-$STORE/star-1.0/bin/star}

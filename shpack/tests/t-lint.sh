@@ -22,11 +22,29 @@ done
 # Every built recipe must declare a shell dep: builder.sh requires it (the build
 # always runs make/patch-shebangs) and there is no ambient-shell fallback.
 for f in packages/*/package.sh; do
+    [ -f "$f" ] || continue
     if ! grep -qE '^depends_on .*\bdash\b' "$f"; then
         echo "no dash dependency in $f" >&2
         bad=1
     fi
 done
+for f in packages/*/package.star; do
+    [ -f "$f" ] || continue
+    if ! grep -qE '^depends_on\(.*"dash(@[^"]*)?"' "$f"; then
+        echo "no dash dependency in $f" >&2
+        bad=1
+    fi
+    if [ -f "${f%.star}.sh" ]; then
+        echo "${f%/*} has both package.star and package.sh" >&2
+        bad=1
+    fi
+done
+
+# The sh() escape hatch in Starlark recipes: allowed, but counted, so the
+# number only goes down.
+escapes=$(cat packages/*/package.star build_systems/*.star 2>/dev/null \
+    | grep -cE '(^|[^_a-z])sh\(' || true)
+echo "sh() escapes in Starlark recipes: $escapes"
 
 [ "$bad" = 0 ] || exit 1
 echo OK

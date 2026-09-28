@@ -2,9 +2,11 @@
 #
 # repo.sh -- recipe loading.
 #
-# A package is a directory $REPO/<name> containing package.sh (the recipe)
-# plus optional patches/ and files/ subdirectories. The recipe is a POSIX
-# shell fragment with two kinds of content:
+# A package is a directory $REPO/<name> containing package.star or
+# package.sh (the recipe) plus optional patches/ and files/ subdirectories.
+# package.star recipes are Starlark, evaluated by `star` (see
+# star/PROTOCOL.md); what follows describes package.sh, a POSIX shell
+# fragment with two kinds of content:
 #
 #   * directive calls (below), declaring metadata: versions and their source
 #     checksums, dependencies, patches, the build system;
@@ -125,15 +127,29 @@ patch() {
     printf '%s\n' "$*" >> "$RECIPE_STATE/patches"
 }
 
-# recipe_load NAME -- evaluate $REPO/NAME/package.sh, capturing directives
-# into $VAR/recipe/NAME. Concretization calls this in a subshell (hook
-# definitions are discarded with it); the builder calls it in-process to keep
-# the hooks, then disarms the directives.
+# is_star_recipe NAME -- true if NAME is written in Starlark (package.star).
+# A package directory holds either package.star or package.sh, not both.
+is_star_recipe() {
+    [ -f "$REPO/$1/package.star" ]
+}
+
+# recipe_load NAME -- capture NAME's directives into $VAR/recipe/NAME.
+# package.star: `star recipe` evaluates it and writes the state files itself
+# (plus `loads`, the build-system modules it pulled in, for hashing).
+# package.sh: evaluate it, the directives appending to the state files.
+# Concretization calls this in a subshell (hook definitions are discarded
+# with it); the builder calls it in-process to keep a package.sh recipe's
+# hooks, then disarms the directives.
 recipe_load() {
     RECIPE_STATE=$VAR/recipe/$1
-    [ -f "$REPO/$1/package.sh" ] || die "no recipe $REPO/$1/package.sh"
     rm -rf "$RECIPE_STATE"
     mkdir -p "$RECIPE_STATE"
+    if is_star_recipe "$1"; then
+        "$STAR" recipe --repo "$REPO" --root "$STAR_ROOT" --out "$RECIPE_STATE" "$1" \
+            || die "cannot load recipe $REPO/$1/package.star"
+        return 0
+    fi
+    [ -f "$REPO/$1/package.sh" ] || die "no recipe $REPO/$1/package.sh"
     . "$REPO/$1/package.sh"
 }
 
@@ -141,7 +157,7 @@ recipe_load() {
 # load, hooks discarded). Returns 1 if there is no such recipe.
 recipe_meta() {
     if [ -f "$VAR/recipe/$1/.loaded" ]; then return 0; fi
-    if [ ! -f "$REPO/$1/package.sh" ]; then return 1; fi
+    if [ ! -f "$REPO/$1/package.sh" ] && ! is_star_recipe "$1"; then return 1; fi
     ( recipe_load "$1" )
     touch "$VAR/recipe/$1/.loaded"
 }
