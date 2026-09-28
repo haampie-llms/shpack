@@ -20,7 +20,7 @@ depends_on(
     "tcc",
     "musl@1.1.24",
     "gmake",
-    "binutils@2.30-musl",
+    "binutils-boot0",
     "gmp",
     "mpfr",
     "grep@2.4-musl",

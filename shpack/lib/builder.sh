@@ -265,10 +265,15 @@ cmd_build_one() {
     # glibc dash, the clean dash above it. Every built recipe must declare one:
     # the build always runs make/patch-shebangs, so there is no shell-free build,
     # and an explicit dep keeps the shell inside the node's recorded closure.
-    if ! direct_dep dash; then
-        die "$name declares no shell dependency (add 'depends_on dash' or 'dash@0.5.12')"
+    # (The dash recipe itself takes its shell from dash-boot, the same
+    # bootstrap dash under a name of its own.)
+    if direct_dep dash; then
+        sh=$(prefix_of dash)/bin/sh
+    elif direct_dep dash-boot; then
+        sh=$(prefix_of dash-boot)/bin/sh
+    else
+        die "$name declares no shell dependency (add depends_on(\"dash\") or \"dash@0.5.12\")"
     fi
-    sh=$(prefix_of dash)/bin/sh
     SHELL=$sh
     # SHELL via MAKEFLAGS so it reaches recursive sub-makes and overrides even a
     # baked-in `SHELL = /bin/sh` (kernel headers, musl, gawk@3.0.4); otherwise a

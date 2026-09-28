@@ -28,12 +28,12 @@ version(
 build_system("generic")
 
 # Built by gcc-16-boot0 (unwrapped: glibc drives its own -nostdlib bootstrap).
-# binutils@2.46.0-musl as/ld; kernel headers via --with-headers. Needs python
+# binutils-boot1 as/ld; kernel headers via --with-headers. Needs python
 # (gen-as-const), bison+m4 (intl/plural.c), make >= 4, gawk@5.3.1 (configure
 # rejects gawk < 3.1.2).
 depends_on(
-    "gcc-boot",
-    "binutils@2.46.0-musl",
+    "gcc-boot2",
+    "binutils-boot1",
     "linux-headers",
     "gmake",
     "python",
@@ -70,7 +70,7 @@ def install(ctx):
             "../configure",
             "CONFIG_SHELL=" + ctx.sh,
             "SHELL=" + ctx.sh,
-            "CC=" + ctx.dep("gcc-boot").prefix + "/bin/gcc",
+            "CC=" + ctx.dep("gcc-boot2").prefix + "/bin/gcc",
             "CFLAGS=-g -O2 %s %s" % (ctx.file_prefix_map, ctx.debug_prefix_map),
             "BASH_SHELL=" + ctx.sh,
             "PYTHON=" + ctx.dep("python").prefix + "/bin/python3",

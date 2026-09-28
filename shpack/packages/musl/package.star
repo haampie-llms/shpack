@@ -19,7 +19,7 @@ version(
 
 build_system("generic")
 
-depends_on("gcc-boot@4.7-2013.11", "binutils@2.30-musl", "gmake", "linux-headers")
+depends_on("gcc-boot0", "binutils-boot0", "gmake", "linux-headers")
 depends_on("dash@0.5.12")
 
 def setup_build_environment(ctx):
@@ -33,7 +33,7 @@ def edit(ctx):
     return [replace_bin_sh(ctx, ["src/process/system.c", "src/stdio/popen.c"])]
 
 def install(ctx):
-    binutils = ctx.dep("binutils").prefix
+    binutils = ctx.dep("binutils-boot0").prefix
     # gcc and binutils triples differ, so pin AR/RANLIB rather than relying on
     # musl's CROSS_COMPILE-derived names.
     tools = ["AR=" + binutils + "/bin/ar", "RANLIB=" + binutils + "/bin/ranlib"]

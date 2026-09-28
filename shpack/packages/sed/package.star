@@ -29,8 +29,8 @@ build_system("autotools")
 # 4.9-musl: GCC 4.7 against musl 1.1.24 (static). 4.9: the glibc sed, built with
 # the final gcc 16 via compiler-wrapper. Each pulls the matching xz for its source.
 depends_on(
-    "gcc-boot@4.7-2013.11",
-    "binutils@2.30-musl",
+    "gcc-boot0",
+    "binutils-boot0",
     "gmake",
     "xz@5.2.5-musl",
     when = "@=4.9-musl",

@@ -15,14 +15,14 @@ version("16.1.0")
 
 build_system("generic")
 
-depends_on("gcc-boot", "glibc", "binutils@2.46.0-musl")
+depends_on("gcc-boot2", "glibc", "binutils-boot1")
 # The gcc/g++ shims are #!$sh scripts, so the clean glibc dash is a runtime dep.
 depends_on("dash")
 
 def install(ctx):
-    gcc = ctx.dep("gcc-boot").prefix
+    gcc = ctx.dep("gcc-boot2").prefix
     glibc = ctx.dep("glibc").prefix
-    binutils = ctx.dep("binutils").prefix
+    binutils = ctx.dep("binutils-boot1").prefix
 
     # gcc/g++ wrappers: -B finds crt1.o/crti.o/crtn.o from the new libc;
     # -dynamic-linker points executables at glibc's loader; -rpath finds

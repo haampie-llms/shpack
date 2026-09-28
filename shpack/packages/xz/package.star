@@ -31,8 +31,8 @@ build_system("autotools")
 # 5.2.5-musl: GCC 4.7 against musl 1.1.24 (static). 5.8.3: the glibc xz, built
 # with the final gcc 16 via compiler-wrapper.
 depends_on(
-    "gcc-boot@4.7-2013.11",
-    "binutils@2.30-musl",
+    "gcc-boot0",
+    "binutils-boot0",
     "gmake",
     when = "@=5.2.5-musl",
 )

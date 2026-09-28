@@ -50,8 +50,8 @@ depends_on("tcc", "musl@1.1.24", when = "@=3.0.4")
 # 5.3.1: gcc 9.5 + binutils 2.30. Modern sed/tar: 5.3.1's configure needs sed -E
 # and its tarball is xz.
 depends_on(
-    "gcc-boot@9.5.0",
-    "binutils@2.30-musl",
+    "gcc-boot1",
+    "binutils-boot0",
     "gmake",
     "sed@4.9-musl",
     "tar@1.35-musl",
@@ -81,7 +81,7 @@ def edit(ctx):
 def configure_args(ctx):
     if ctx.satisfies("@=5.3.1"):
         t = triple(ctx, "musl")
-        args = ["CC=" + ctx.dep("gcc-boot").prefix + "/bin/gcc", "CFLAGS=-O2"]
+        args = ["CC=" + ctx.dep("gcc-boot1").prefix + "/bin/gcc", "CFLAGS=-O2"]
     else:
         t = triple(ctx)
         args = ["CC=gcc"]
