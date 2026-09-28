@@ -84,40 +84,41 @@ time -- store and state are shared on disk.
 ```
 ...
 ==> shpack install gcc
-a062f54    gcc@16.1.0
-b66470f      gcc-boot-wrapper@16.1.0
-7218c8a        gcc-boot@16.1.0
-43d2deb          gmake@4.4.1
+9b36374    gcc@16.1.0
+0c181f8      gcc-boot-wrapper@16.1.0
+b31ec8a        gcc-boot2@16.1.0
+32616aa          gmake@4.4.1
 055307c            tcc@0.9.27 (external)
 9d99eb9            musl@1.1.24 (external)
-91ab285            grep@2.4-musl
+88cd1c4            grep@2.4-musl
 219a904              dash@0.5.12 (external)
-646eea2            gawk@3.0.4
-7ebe88e          diffutils@2.7
-18a175e          findutils@4.2.33
-d3b0c23          gcc-boot@9.5.0
-2badc02            gcc-boot@4.7-2013.11
-12ec57a              binutils@2.30-musl
-81a84cb                m4@1.4.7
-c61dffd              gmp@4.3.2
-54f8c21              mpfr@2.4.2
-57e6257              mpc@1.0.3
-87b37c9            musl@1.2.5
-07ee55e              linux-headers@6.9.1
-5c56299                sed@4.9-musl
-909212f                  xz@5.2.5-musl
-1aeee0b            tar@1.35-musl
-682b995          binutils@2.46.0-musl
-eb38678        glibc@2.43
-2881b9b          python@3.8.20
-ccd90d5          bison@3.8.2
-75c303a          gawk@5.3.1
-f1e744e          dash@0.5.13.4
-7ec050b            glibc@2.43-boot
-cfe2ea5      binutils@2.46.0
-287cc6b        libstdcxx-boot1@16.1.0
-7c51198        zlib-ng@2.3.3-boot
-d18a43d        zstd@1.5.7-boot
+fcd4bd2            gawk@3.0.4
+dce3138          diffutils@2.7
+3434227          findutils@4.2.33
+462641a          gcc-boot1@9.5.0
+7fc0b11            gcc-boot0@4.7-2013.11
+a8a47ca              binutils-boot0@2.30-musl
+5117405                m4@1.4.7
+ac8cf40              gmp@4.3.2
+ef7b22d              mpfr@2.4.2
+a6af7a0              mpc@1.0.3
+46d3c62            musl@1.2.5
+7110442              linux-headers@6.9.1
+036bf59                sed@4.9-musl
+913a973                  xz@5.2.5-musl
+5b0eeaf            tar@1.35-musl
+2086ec2          binutils-boot1@2.46.0-musl
+b4dcb20            gawk@5.3.1
+7b6eca3        glibc@2.43
+5b772cd          python@3.8.20
+7049e44          bison@3.8.2
+dc9d939          dash@0.5.13.4
+f677d58            glibc@2.43-boot
+2ff07b9            dash-boot@0.5.12 (external)
+318325c      binutils@2.46.0
+7f84d6d        libstdcxx-boot1@16.1.0
+6f31ed5        zlib-ng@2.3.3-boot
+512bb73        zstd@1.5.7-boot
 ```
 
 The `(external)` nodes are part of the initial bootstrapping phase. All installed
