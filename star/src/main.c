@@ -23,7 +23,7 @@ static void usage(void)
           "       star test [--xfail LIST] FILE...\n"
           "       star recipe --repo DIR --root DIR [--format shpack|json] [--out DIR] NAME\n"
           "       star plan --repo DIR --root DIR --ctx FILE [--format sh|json] NAME\n"
-          "       star concretize --repo DIR --root DIR --module FILE --cfg FILE --out DIR SPEC...\n",
+          "       star concretize --repo DIR --root DIR --module FILE [--entry FN] --cfg FILE --out DIR SPEC...\n",
           stderr);
     exit(2);
 }

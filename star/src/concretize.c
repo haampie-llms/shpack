@@ -13,16 +13,22 @@
  * host.sha256(s)          the hex digest of a string
  * host.sha256_file(path)  ... of a file
  * host.read(path)         a file's content, None if it does not exist
+ * host.list(dir)          the names in a directory, sorted bytewise, no dotfiles;
+ *                         None if it is not one
+ * host.json(value)        value as JSON (the canonical form of --format json)
+ * host.json_decode(s)     the value of a JSON text; numbers with a fraction or an
+ *                         exponent are truncated to ints (the dialect has no floats)
  * host.star_version       "star 1.0"
  *
- * concretize(host, cfg, specs) returns {"files": {path: content}, "stdout": s};
- * paths are relative to VAR.
+ * The module's ENTRY function (--entry, default "concretize") is called as
+ * ENTRY(host, cfg, specs) and returns {"files": {path: content}, "stdout": s};
+ * paths are relative to --out.
  */
 
 #include <dirent.h>
 #include <sys/stat.h>
 
-static const char *opt_module, *opt_cfg;
+static const char *opt_module, *opt_cfg, *opt_entry = "concretize";
 
 /* ------------------------------------------------------------ the record -- */
 
@@ -263,6 +269,253 @@ static V h_read(Args *a)
     return mk_str(src, len);
 }
 
+static V h_list(Args *a)
+{
+    V p, out;
+    DIR *d;
+    struct dirent *e;
+    char **names = NULL;
+    int n = 0, cap = 0, i;
+    unpack_positional(a, 1, 1, &p);
+    if (!(d = opendir(want_str(p, "list")->s)))
+        return None;
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.')
+            continue;
+        if (n == cap) {
+            int nc = cap ? cap * 2 : 16;
+            names = arena_grow(names, sizeof(char *) * cap, sizeof(char *) * nc);
+            cap = nc;
+        }
+        names[n++] = arena_strdup(e->d_name);
+    }
+    closedir(d);
+    if (n)
+        qsort(names, n, sizeof(char *), cmp_cstr);
+    out = mk_list(n);
+    for (i = 0; i < n; i++)
+        list_append(out, mk_cstr(names[i]));
+    return out;
+}
+
+static V h_json(Args *a)
+{
+    V v;
+    Buf b;
+    unpack_positional(a, 1, 1, &v);
+    buf_init(&b);
+    json_value(&b, v);
+    return mk_str(b.p ? b.p : "", b.len);
+}
+
+/* JSON decoding, recursive descent over the text */
+typedef struct JP { const char *p, *end; } JP;
+
+static void jp_ws(JP *j)
+{
+    while (j->p < j->end && (*j->p == ' ' || *j->p == '\t' || *j->p == '\n' || *j->p == '\r'))
+        j->p++;
+}
+
+static void jp_fail(JP *j, const char *what)
+{
+    (void)j;
+    star_error("json_decode: %s", what);
+}
+
+static void put_utf8(Buf *b, unsigned cp)
+{
+    if (cp < 0x80) {
+        buf_putc(b, (char)cp);
+    } else if (cp < 0x800) {
+        buf_putc(b, (char)(0xC0 | cp >> 6));
+        buf_putc(b, (char)(0x80 | (cp & 63)));
+    } else if (cp < 0x10000) {
+        buf_putc(b, (char)(0xE0 | cp >> 12));
+        buf_putc(b, (char)(0x80 | (cp >> 6 & 63)));
+        buf_putc(b, (char)(0x80 | (cp & 63)));
+    } else {
+        buf_putc(b, (char)(0xF0 | cp >> 18));
+        buf_putc(b, (char)(0x80 | (cp >> 12 & 63)));
+        buf_putc(b, (char)(0x80 | (cp >> 6 & 63)));
+        buf_putc(b, (char)(0x80 | (cp & 63)));
+    }
+}
+
+static unsigned jp_hex4(JP *j)
+{
+    unsigned v = 0;
+    int i;
+    if (j->end - j->p < 4)
+        jp_fail(j, "short \\u escape");
+    for (i = 0; i < 4; i++) {
+        char c = *j->p++;
+        v <<= 4;
+        if (c >= '0' && c <= '9') v |= c - '0';
+        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+        else jp_fail(j, "bad \\u escape");
+    }
+    return v;
+}
+
+static V jp_string(JP *j)
+{
+    Buf b;
+    buf_init(&b);
+    j->p++;     /* the quote */
+    for (;;) {
+        char c;
+        if (j->p >= j->end)
+            jp_fail(j, "unterminated string");
+        c = *j->p++;
+        if (c == '"')
+            break;
+        if (c != '\\') {
+            buf_putc(&b, c);
+            continue;
+        }
+        if (j->p >= j->end)
+            jp_fail(j, "unterminated string");
+        c = *j->p++;
+        switch (c) {
+        case '"': case '\\': case '/': buf_putc(&b, c); break;
+        case 'b': buf_putc(&b, '\b'); break;
+        case 'f': buf_putc(&b, '\f'); break;
+        case 'n': buf_putc(&b, '\n'); break;
+        case 'r': buf_putc(&b, '\r'); break;
+        case 't': buf_putc(&b, '\t'); break;
+        case 'u': {
+            unsigned cp = jp_hex4(j);
+            if (cp >= 0xD800 && cp < 0xDC00 && j->end - j->p >= 6 && j->p[0] == '\\' && j->p[1] == 'u') {
+                unsigned lo;
+                j->p += 2;
+                lo = jp_hex4(j);
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+            }
+            put_utf8(&b, cp);
+            break;
+        }
+        default: jp_fail(j, "bad escape");
+        }
+    }
+    return mk_str(b.p ? b.p : "", b.len);
+}
+
+static V jp_value(JP *j, int depth)
+{
+    if (depth > 64)
+        jp_fail(j, "nested too deeply");
+    jp_ws(j);
+    if (j->p >= j->end)
+        jp_fail(j, "unexpected end");
+    switch (*j->p) {
+    case '{': {
+        V d = mk_dict();
+        j->p++;
+        jp_ws(j);
+        if (j->p < j->end && *j->p == '}') {
+            j->p++;
+            return d;
+        }
+        for (;;) {
+            V k, v;
+            jp_ws(j);
+            if (j->p >= j->end || *j->p != '"')
+                jp_fail(j, "want a string key");
+            k = jp_string(j);
+            jp_ws(j);
+            if (j->p >= j->end || *j->p++ != ':')
+                jp_fail(j, "want ':'");
+            v = jp_value(j, depth + 1);
+            dict_set(d, k, v);
+            jp_ws(j);
+            if (j->p < j->end && *j->p == ',') {
+                j->p++;
+                continue;
+            }
+            if (j->p < j->end && *j->p == '}') {
+                j->p++;
+                return d;
+            }
+            jp_fail(j, "want ',' or '}'");
+        }
+    }
+    case '[': {
+        V l = mk_list(0);
+        j->p++;
+        jp_ws(j);
+        if (j->p < j->end && *j->p == ']') {
+            j->p++;
+            return l;
+        }
+        for (;;) {
+            list_append(l, jp_value(j, depth + 1));
+            jp_ws(j);
+            if (j->p < j->end && *j->p == ',') {
+                j->p++;
+                continue;
+            }
+            if (j->p < j->end && *j->p == ']') {
+                j->p++;
+                return l;
+            }
+            jp_fail(j, "want ',' or ']'");
+        }
+    }
+    case '"':
+        return jp_string(j);
+    case 't':
+        if (j->end - j->p >= 4 && memcmp(j->p, "true", 4) == 0) { j->p += 4; return True; }
+        break;
+    case 'f':
+        if (j->end - j->p >= 5 && memcmp(j->p, "false", 5) == 0) { j->p += 5; return False; }
+        break;
+    case 'n':
+        if (j->end - j->p >= 4 && memcmp(j->p, "null", 4) == 0) { j->p += 4; return None; }
+        break;
+    default:
+        if (*j->p == '-' || (*j->p >= '0' && *j->p <= '9')) {
+            int neg = *j->p == '-';
+            int64_t v = 0;
+            if (neg)
+                j->p++;
+            if (j->p >= j->end || *j->p < '0' || *j->p > '9')
+                jp_fail(j, "bad number");
+            while (j->p < j->end && *j->p >= '0' && *j->p <= '9') {
+                if (v > (INT64_MAX - 9) / 10)
+                    jp_fail(j, "number out of range");
+                v = v * 10 + (*j->p++ - '0');
+            }
+            /* a fraction or exponent is dropped: truncated toward zero */
+            if (j->p < j->end && *j->p == '.') {
+                j->p++;
+                while (j->p < j->end && *j->p >= '0' && *j->p <= '9')
+                    j->p++;
+            }
+            if (j->p < j->end && (*j->p == 'e' || *j->p == 'E'))
+                jp_fail(j, "exponents are not supported");
+            return mk_int(neg ? -v : v);
+        }
+    }
+    jp_fail(j, "unexpected character");
+    return None;
+}
+
+static V h_json_decode(Args *a)
+{
+    V s, v;
+    JP j;
+    unpack_positional(a, 1, 1, &s);
+    j.p = want_str(s, "json_decode")->s;
+    j.end = j.p + AS_STR(s)->len;
+    v = jp_value(&j, 0);
+    jp_ws(&j);
+    if (j.p != j.end)
+        jp_fail(&j, "trailing data");
+    return v;
+}
+
 /* ------------------------------------------------------------------- main -- */
 
 static V load_cfg(void)
@@ -323,6 +576,7 @@ int concretize_main(int argc, char **argv)
         OPT("--module", opt_module);
         OPT("--cfg", opt_cfg);
         OPT("--out", conc_out);
+        OPT("--entry", opt_entry);
 #undef OPT
         if (a[0] == '-') {
             fprintf(stderr, "star concretize: unexpected argument %s\n", a);
@@ -338,23 +592,27 @@ int concretize_main(int argc, char **argv)
     host_init();
     cfg = load_cfg();
     {
-        const char *names[] = {"recipe", "files", "sha256", "sha256_file", "read", "star_version"};
-        Str *sn[6];
-        V sv[6];
-        for (i = 0; i < 6; i++)
+        const char *names[] = {"recipe", "files", "sha256", "sha256_file", "read", "list",
+                               "json", "json_decode", "star_version"};
+        Str *sn[9];
+        V sv[9];
+        for (i = 0; i < 9; i++)
             sn[i] = intern(names[i]);
         sv[0] = mk_builtin("recipe", h_recipe, NULL);
         sv[1] = mk_builtin("files", h_files, NULL);
         sv[2] = mk_builtin("sha256", h_sha256, NULL);
         sv[3] = mk_builtin("sha256_file", h_sha256_file, NULL);
         sv[4] = mk_builtin("read", h_read, NULL);
-        sv[5] = mk_cstr("star " STAR_VERSION);
-        host = mk_struct("host", 6, sn, sv);
+        sv[5] = mk_builtin("list", h_list, NULL);
+        sv[6] = mk_builtin("json", h_json, NULL);
+        sv[7] = mk_builtin("json_decode", h_json_decode, NULL);
+        sv[8] = mk_cstr("star " STAR_VERSION);
+        host = mk_struct("host", 9, sn, sv);
     }
     m = load_module(opt_module, NULL);
-    fn = module_global(m, "concretize");
+    fn = module_global(m, opt_entry);
     if (!fn)
-        star_error("%s: no function concretize", opt_module);
+        star_error("%s: no function %s", opt_module, opt_entry);
     args[0] = host;
     args[1] = cfg;
     args[2] = specs;

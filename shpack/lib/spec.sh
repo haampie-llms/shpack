@@ -13,9 +13,9 @@
 # canonical manifest of everything that determines its build -- the recipe
 # text and auxiliary files, the modules it loads, the source tarball
 # checksums, the target architecture, and the (name, version, hash, types) of
-# every direct dependency -- truncated to 7 hex digits. Dependency hashes make
-# it a Merkle hash: any change anywhere in a package's closure changes its
-# store prefix $STORE/<name>-<version>-<hash7>. host.files in star lists the
+# every direct dependency -- in Spack's spelling (32 base32 characters).
+# Dependency hashes make it a Merkle hash: any change anywhere in a package's
+# closure changes its store prefix $STORE/linux-<target>/<name>-<version>-<hash>. host.files in star lists the
 # package files as walk_files below does.
 
 # walk_files DIR [REL] -> print the relative paths of all regular files under

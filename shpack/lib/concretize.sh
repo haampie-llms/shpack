@@ -61,7 +61,7 @@ cmd_spec() {
 # already on BASEPATH (whose -j is not trusted), then run the full DAG -jN
 # under the new one.
 cmd_install() {
-    local bid bprefix
+    local bid bprefix status
     cmd_concretize "$@"
     mkdir -p "$VAR/stamps" "$VAR/logs"
     PATH=$BASEPATH
@@ -82,7 +82,23 @@ cmd_install() {
             export PATH
         fi
     fi
-    exec make -f "$VAR/dag.mk" -j"$JOBS" all
+    status=0
+    make -f "$VAR/dag.mk" -j"$JOBS" all || status=$?
+    # What did get installed goes into the Spack database either way.
+    cmd_spack_db
+    exit $status
+}
+
+# cmd_spack_db -- record the last concretization's installed nodes in
+# $STORE/.spack-db/index.json (lib/spackdb.star), so that Spack, pointed at
+# $STORE as its install_tree root, finds them without a reindex.
+cmd_spack_db() {
+    mkdir -p "$VAR"
+    write_concretize_cfg > "$VAR/spackdb-cfg.star"
+    "$STAR" concretize --repo "$REPO" --root "$STAR_ROOT" \
+        --module "$SHPACK_LIB/spackdb.star" --entry spack_db \
+        --cfg "$VAR/spackdb-cfg.star" --out "$STORE" \
+        || die "cannot write $STORE/.spack-db"
 }
 
 cmd_env() {
@@ -108,8 +124,8 @@ cmd_find() {
             printf '%-10s %s@%s  %s\n' "[$k]" "$n" "$v" "$p"
         done < "$VAR/index"
     else
-        for d in "$STORE"/*; do
-            if [ -f "$d/.shpack/spec" ]; then
+        for d in "$STORE"/*/*; do
+            if [ -f "$d/.spack/spec.json" ]; then
                 printf '%s\n' "$d"
             fi
         done
