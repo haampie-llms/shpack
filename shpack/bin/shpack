@@ -58,6 +58,8 @@ fi
 VAR=${SHPACK_VAR:-$BUILDDIR/shpack}
 REPO=${SHPACK_REPO:-$SHPACK_ROOT/packages}
 EXTERNALS=${SHPACK_EXTERNALS:-$SHPACK_ROOT/etc/externals}
+# Where load("//...") in package.star resolves: build_systems/ lives here.
+STAR_ROOT=${SHPACK_STAR_ROOT:-$SHPACK_ROOT}
 
 # Derived settings (CONFIG_SHELL, SANDBOX, PATCH_SHEBANGS, SHPACK_BOOTSTRAP_MAKE),
 # each overridable from the environment.
@@ -72,8 +74,9 @@ export PATCH_SHEBANGS
 mkdir -p "$VAR"
 
 # Children spawned from dag.mk recipes must see the same world.
-export ROOT STORE DISTFILES BUILDDIR ARCH JOBS BASEPATH \
-       SHPACK_VAR="$VAR" SHPACK_REPO="$REPO" SHPACK_EXTERNALS="$EXTERNALS"
+export ROOT STORE DISTFILES BUILDDIR ARCH JOBS BASEPATH STAR \
+       SHPACK_VAR="$VAR" SHPACK_REPO="$REPO" SHPACK_EXTERNALS="$EXTERNALS" \
+       SHPACK_STAR_ROOT="$STAR_ROOT"
 
 # The dag.mk driver-make shell (see etc/config). SHELL mirrors it so the top
 # make avoids a /bin/sh shebang lookup; per-node builds override SHELL with their

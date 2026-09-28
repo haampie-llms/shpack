@@ -38,6 +38,25 @@ ln -sf "$(command -v sh)" "$TESTDIR/store/dash/bin/sh"
 printf 'dash@host %s\n' "$TESTDIR/store/dash" >> "$SHPACK_EXTERNALS"
 export TEST_DASH_SH="$TESTDIR/store/dash/bin/sh"
 
+# star, the Starlark evaluator for package.star recipes, built with the host
+# cc (run.sh builds it once and exports STAR; a test run alone builds its
+# own). load("//...") resolves against a copy of the shpack root's
+# build_systems/, so tests may edit it.
+if [ -z "${STAR:-}" ]; then
+    STAR=$TESTDIR/star
+    ${CC:-cc} -O1 -o "$STAR" "$TESTROOT/../star/star.c"
+fi
+export STAR
+export SHPACK_STAR_ROOT="$TESTDIR/root"
+mkdir -p "$SHPACK_STAR_ROOT"
+cp -R "$TESTROOT/build_systems" "$SHPACK_STAR_ROOT/"
+
+# mkstar NAME -- create a package dir with a Starlark recipe from stdin.
+mkstar() {
+    mkdir -p "$SHPACK_REPO/$1"
+    cat > "$SHPACK_REPO/$1/package.star"
+}
+
 shpack() {
     sh "$TESTROOT/bin/shpack" "$@"
 }

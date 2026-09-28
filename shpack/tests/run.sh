@@ -15,6 +15,12 @@ else
     runner=sh
 fi
 
+# star, the Starlark evaluator, built once for every test.
+STAR=$(mktemp -d /tmp/shpack-star.XXXXXX)/star
+trap 'rm -rf "${STAR%/star}"' EXIT
+${CC:-cc} -O1 -o "$STAR" ../../star/star.c || exit 1
+export STAR
+
 fail=0
 for t in t-*.sh; do
     log=/tmp/shpack-test-${t%.sh}.log

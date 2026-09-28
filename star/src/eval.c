@@ -1090,7 +1090,7 @@ static void exec_load(Frame *fr, Node *st)
     int i;
     fr->line = st->line;
     fr->col = st->col;
-    m = load_module(st->a->s->s, fr->info->filename);
+    m = load_module(st->a->s->s, fr->info->filename ? fr->info->filename : "");
     for (i = 0; i < st->n; i++) {
         Node *kv = st->list[i];
         Str *want = intern_n(kv->a->s->s, kv->a->s->len);

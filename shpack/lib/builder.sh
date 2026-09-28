@@ -105,6 +105,89 @@ replace_bin_sh() {
     done
 }
 
+# --- Starlark recipes ----------------------------------------------------
+#
+# A package.star recipe does not run here: `star plan` evaluates its phases
+# against a build context (ctx.star, written below) and renders the actions
+# as a plain script ($SPEC/build.sh), which the builder sources in its own
+# shell -- so cd/export persist across phases exactly as with package.sh
+# hooks. The script calls only simple commands plus the two helpers below.
+
+# star_sed EXPR FILE... -- sed -i on files that must exist (an unmatched glob
+# stays literal and fails here, instead of silently editing nothing).
+star_sed() {
+    local script f
+    script=$1
+    shift
+    for f in "$@"; do
+        [ -f "$f" ] || die "$f: no such file to edit"
+    done
+    sed -i "$script" "$@"
+}
+
+# star_rglob DIR PATTERN -> DIR/**/PATTERN: every file under DIR whose base
+# name matches the glob PATTERN (walk_files, since there is no find).
+star_rglob() {
+    local f
+    for f in $(walk_files "$1"); do
+        case ${f##*/} in
+            $2) printf '%s\n' "$1/$f" ;;
+        esac
+    done
+}
+
+# star_str S -> S as a Starlark string literal. Paths and names only: a
+# quote or backslash is refused rather than escaped.
+star_str() {
+    case $1 in
+        *'"'*|*'\'*) die "cannot pass '$1' to star (quote or backslash)" ;;
+    esac
+    printf '"%s"' "$1"
+}
+
+# write_ctx -- the build context of this node as a Starlark file (ctx.star).
+write_ctx() {
+    local k v d dn seen f first
+    printf 'ctx = {\n'
+    for k in name version id arch prefix sh stage_dir source_dir package_dir \
+             file_prefix_map debug_prefix_map; do
+        case $k in
+            arch) eval "v=\$ARCH" ;;
+            prefix) eval "v=\$PREFIX" ;;
+            *) eval "v=\$$k" ;;
+        esac
+        printf '    "%s": %s,\n' "$k" "$(star_str "$v")"
+    done
+    printf '    "jobs": %s,\n' "$JOBS"
+    if [ -n "$makejobs" ]; then
+        printf '    "makejobs": [%s],\n' "$(star_str "$makejobs")"
+    else
+        printf '    "makejobs": [],\n'
+    fi
+    printf '    "package_files": ['
+    first=1
+    for f in $(walk_files "$package_dir"); do
+        [ "$first" = 1 ] || printf ', '
+        first=0
+        star_str "$f"
+    done
+    printf '],\n'
+    # name -> prefix over the direct deps then the closure, first one wins
+    # (the prefix_of rule).
+    printf '    "deps": {\n'
+    seen=' '
+    for d in $(cat "$SPEC/deps") $(cat "$SPEC/closure"); do
+        dn=$(cat "$VAR/spec/$d/name")
+        case $seen in
+            *" $dn "*) continue ;;
+        esac
+        seen="$seen$dn "
+        printf '        %s: %s,\n' "$(star_str "$dn")" "$(star_str "$(cat "$VAR/spec/$d/prefix")")"
+    done
+    printf '    },\n'
+    printf '}\n'
+}
+
 # download URL DEST -- best effort, mirrors first; only meaningful once curl
 # exists (QEMU/network builds). The chroot bootstrap prestages distfiles.
 download() {
@@ -202,7 +285,12 @@ do_finalize() {
             >> "$PREFIX/.shpack/deps"
     done
     cp "$SPEC/manifest" "$PREFIX/.shpack/manifest"
-    cp "$package_dir/package.sh" "$PREFIX/.shpack/package.sh"
+    if is_star_recipe "$name"; then
+        cp "$package_dir/package.star" "$PREFIX/.shpack/package.star"
+        cp "$SPEC/build.sh" "$PREFIX/.shpack/build.sh"
+    else
+        cp "$package_dir/package.sh" "$PREFIX/.shpack/package.sh"
+    fi
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
     # world links via libtool, and they bake build-time paths / dependency
     # orderings that differ across builds. A glob, not find -- shpack core has no
@@ -229,21 +317,26 @@ cmd_build_one() {
     fi
 
     package_dir=$REPO/$name
-    recipe_load "$name"
-    recipe_disarm
+    # package.star: the directive state is already under $VAR/recipe (from
+    # concretization) and the phases come from `star plan` below.
+    # package.sh: load the hooks in-process, with the build system's defaults.
+    if ! is_star_recipe "$name"; then
+        recipe_load "$name"
+        recipe_disarm
 
-    bs=generic
-    if [ -f "$VAR/recipe/$name/build_system" ]; then
-        while read -r when val; do
-            if [ "$when" = - ] || [ "$when" = "$version" ]; then
-                bs=$val
-                break
-            fi
-        done < "$VAR/recipe/$name/build_system"
+        bs=generic
+        if [ -f "$VAR/recipe/$name/build_system" ]; then
+            while read -r when val; do
+                if [ "$when" = - ] || [ "$when" = "$version" ]; then
+                    bs=$val
+                    break
+                fi
+            done < "$VAR/recipe/$name/build_system"
+        fi
+        [ -f "$SHPACK_LIB/build_systems/$bs.sh" ] \
+            || die "$name: unknown build system '$bs'"
+        . "$SHPACK_LIB/build_systems/$bs.sh"
     fi
-    [ -f "$SHPACK_LIB/build_systems/$bs.sh" ] \
-        || die "$name: unknown build system '$bs'"
-    . "$SHPACK_LIB/build_systems/$bs.sh"
 
     # Empty so the inner make inherits the dag.mk jobserver from MAKEFLAGS;
     # an explicit -j would override it and oversubscribe JOBS x JOBS.
@@ -338,19 +431,27 @@ cmd_build_one() {
         "$PATCH_SHEBANGS" "$sh" "$stage_dir"
     fi
 
-    if is_function setup_build_environment; then
-        setup_build_environment
-    fi
-
-    mkdir -p "$PREFIX"
-    for phase in $SHPACK_PHASES; do
-        echo "==> $id: $phase"
-        if is_function "$phase"; then
-            "$phase"
-        else
-            "default_$phase"
+    if is_star_recipe "$name"; then
+        write_ctx > "$SPEC/ctx.star"
+        "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
+            "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
+        mkdir -p "$PREFIX"
+        . "$SPEC/build.sh"
+    else
+        if is_function setup_build_environment; then
+            setup_build_environment
         fi
-    done
+
+        mkdir -p "$PREFIX"
+        for phase in $SHPACK_PHASES; do
+            echo "==> $id: $phase"
+            if is_function "$phase"; then
+                "$phase"
+            else
+                "default_$phase"
+            fi
+        done
+    fi
 
     echo "==> $id: finalize"
     do_finalize

@@ -118,6 +118,11 @@ visit() {
             sort -u "$sdir/closure.tmp" > "$sdir/closure"
             rm -f "$sdir/closure.tmp"
         fi
+        # The evaluator identity ("star 1.0") enters the hash of every
+        # Starlark recipe; ask for it once per concretization.
+        if [ -f "$VAR/recipe/$name/loads" ] && [ -z "${STAR_VERSION:-}" ]; then
+            STAR_VERSION=$("$STAR" version) || die "cannot run $STAR"
+        fi
         {
             printf 'package %s\n' "$name"
             printf 'version %s\n' "$version"
@@ -128,6 +133,14 @@ visit() {
             for f in $(walk_files "$REPO/$name"); do
                 printf 'file %s %s\n' "$(sha256_file "$REPO/$name/$f")" "$f"
             done
+            # A Starlark recipe also depends on the evaluator and on every
+            # module it loads (build systems, helpers), by content.
+            if [ -f "$VAR/recipe/$name/loads" ]; then
+                printf 'evaluator %s\n' "$STAR_VERSION"
+                while read -r f; do
+                    printf 'load %s %s\n' "$(sha256_file "$STAR_ROOT/$f")" "$f"
+                done < "$VAR/recipe/$name/loads"
+            fi
             for dep in $(cat "$sdir/deps"); do
                 printf 'dep %s %s %s\n' \
                     "$(cat "$VAR/spec/$dep/name")" \
