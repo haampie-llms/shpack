@@ -7,7 +7,8 @@
 #   spec/<id>/        one dir per node, id = name-version
 #     name, version, kind (built|external), hash, prefix
 #     deps              direct dep ids, recipe order
-#     closure           transitive dep ids, sorted (order comes from topo)
+#     closure           transitive dep ids, sorted
+#     order             the closure in DFS post-order over declared deps
 #     manifest          the canonical hash input (kept for auditability)
 #   topo              all ids, dependencies before dependents
 #   roots             ids of the requested packages
@@ -72,7 +73,7 @@ resolve() {
 # everything below it. Appends to $VAR/topo in dependency order. Sets
 # VISIT_ID to the resolved id.
 visit() {
-    local id sdir name version kind prefix dep depid hash f
+    local id sdir name version kind prefix dep depid hash f c
     resolve "$1"
     id=$RES_ID name=$RES_NAME version=$RES_VERSION
     kind=$RES_KIND prefix=$RES_PREFIX
@@ -90,6 +91,7 @@ visit() {
     printf '%s\n' "$kind"    > "$sdir/kind"
     : > "$sdir/deps"
     : > "$sdir/closure"
+    : > "$sdir/order"
 
     if [ "$kind" = external ]; then
         # Externals contribute their identity to dependents' hashes but have
@@ -114,6 +116,11 @@ visit() {
                 printf '%s\n' "$depid" >> "$sdir/deps"
                 printf '%s\n' "$depid" >> "$sdir/closure.tmp"
                 cat "$VAR/spec/$depid/closure" >> "$sdir/closure.tmp"
+                # order: the closure in DFS post-order over declared deps
+                # (dependencies before dependents), for compose_path.
+                for c in $(cat "$VAR/spec/$depid/order") "$depid"; do
+                    member_line "$c" "$sdir/order" || printf '%s\n' "$c" >> "$sdir/order"
+                done
             done < "$VAR/recipe/$name/deps"
             sort -u "$sdir/closure.tmp" > "$sdir/closure"
             rm -f "$sdir/closure.tmp"
@@ -162,16 +169,16 @@ visit() {
 }
 
 # compose_path ID -> "ownbin:depbin:...:" -- the node's own bin dir, then the
-# bin dir of every closure member, most-derived first (reverse topological
-# order), each suffixed ':'. The caller appends BASEPATH. Deterministic at
-# concretization time: no runtime PATH composition anywhere.
+# bin dir of every closure member, most-derived first, each suffixed ':'. The
+# caller appends BASEPATH. The order is the node's own (a DFS post-order over
+# its declared dependencies, reversed), never the whole DAG's: which of two
+# dependencies' `ld` comes first must not depend on what else was concretized
+# alongside, since it is not in the hash.
 compose_path() {
     local out c
     out=$(cat "$VAR/spec/$1/prefix")/bin:
-    for c in $(reverse_lines "$VAR/topo"); do
-        if member_line "$c" "$VAR/spec/$1/closure"; then
-            out=$out$(cat "$VAR/spec/$c/prefix")/bin:
-        fi
+    for c in $(reverse_lines "$VAR/spec/$1/order"); do
+        out=$out$(cat "$VAR/spec/$c/prefix")/bin:
     done
     printf '%s' "$out"
 }
