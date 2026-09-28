@@ -447,16 +447,19 @@ static V a_mkdir(Args *a)
     return mk_action("mkdir", 1, names, vals);
 }
 
+/* copy(src, dst, recursive = False, preserve = False): preserve keeps modes,
+ * times and symlinks (cp -a) and implies recursive. */
 static V a_copy(Args *a)
 {
-    V src, dst, rec = NULL;
-    const char *names[] = {"src", "dst", "recursive"};
-    V vals[3];
-    unpack_args(a, "src", &src, "dst", &dst, "recursive?", &rec, NULL);
+    V src, dst, rec = NULL, pres = NULL;
+    const char *names[] = {"src", "dst", "recursive", "preserve"};
+    V vals[4];
+    unpack_args(a, "src", &src, "dst", &dst, "recursive?", &rec, "preserve?", &pres, NULL);
     vals[0] = paths_arg(src, "copy");
     vals[1] = (V)want_str(dst, "copy");
     vals[2] = rec && truth(rec) ? True : NULL;
-    return mk_action("copy", 3, names, vals);
+    vals[3] = pres && truth(pres) ? True : NULL;
+    return mk_action("copy", 4, names, vals);
 }
 
 static V a_move(Args *a)
@@ -497,6 +500,34 @@ static V link_impl(Args *a, const char *op)
 }
 static V a_symlink(Args *a) { return link_impl(a, "symlink"); }
 static V a_hardlink(Args *a) { return link_impl(a, "hardlink"); }
+
+/* symlink_each(targets, dir, prefix = "", if_missing = False,
+ *              relative = False, exclude = None):
+ * for every existing path among `targets` (paths or globs, expanded once,
+ * before any link is made; missing ones are skipped), a symlink DIR/PREFIX<basename> pointing at it -- or at
+ * just <basename> if relative (a link beside its target). Base names matching
+ * the glob `exclude` are skipped. For linking in what a prefix turns out to
+ * contain (glibc's kernel headers, binutils' triple-prefixed tools). */
+static V a_symlink_each(Args *a)
+{
+    V targets, dir, prefix = NULL, if_missing = NULL, relative = NULL, exclude = NULL;
+    const char *names[] = {"targets", "dir", "prefix", "if_missing", "relative", "exclude"};
+    V vals[6];
+    unpack_args(a, "targets", &targets, "dir", &dir, "prefix?", &prefix, "if_missing?", &if_missing,
+                "relative?", &relative, "exclude?", &exclude, NULL);
+    vals[0] = paths_arg(targets, "symlink_each");
+    vals[1] = (V)want_str(dir, "symlink_each");
+    vals[2] = prefix && prefix != None && AS_STR(want_str(prefix, "symlink_each"))->len ? prefix : NULL;
+    if (vals[2] && strchr(AS_STR(prefix)->s, '/'))
+        star_error("symlink_each: prefix must not contain /");
+    vals[3] = if_missing && truth(if_missing) ? True : NULL;
+    vals[4] = relative && truth(relative) ? True : NULL;
+    vals[5] = exclude && exclude != None ? (V)want_str(exclude, "symlink_each") : NULL;
+    if (vals[5] && (strchr(AS_STR(exclude)->s, '/') || strchr(AS_STR(exclude)->s, '\'') ||
+                    strchr(AS_STR(exclude)->s, ' ')))
+        star_error("symlink_each: exclude is a base-name glob (no /, quotes or spaces)");
+    return mk_action("symlink_each", 6, names, vals);
+}
 
 static void want_mode(V m, const char *what)
 {
@@ -680,6 +711,7 @@ static const struct { const char *name; BuiltinFn fn; } host_fns[] = {
     {"run", a_run}, {"sh", a_sh}, {"setenv", a_setenv}, {"prepend_path", a_prepend_path},
     {"unsetenv", a_unsetenv}, {"chdir", a_chdir}, {"mkdir", a_mkdir}, {"copy", a_copy},
     {"move", a_move}, {"remove", a_remove}, {"symlink", a_symlink}, {"hardlink", a_hardlink},
+    {"symlink_each", a_symlink_each},
     {"chmod", a_chmod}, {"write_file", a_write_file}, {"append_file", a_append_file},
     {"substitute", a_substitute}, {"filter_file", a_filter_file},
     {NULL, NULL}
@@ -1357,9 +1389,11 @@ static void render_action(Buf *b, V act)
                 buf_putc(b, ' ');
             }
         }
+        /* `command`: the plan is sourced by the builder shell, whose own
+         * functions must never shadow the program a recipe names */
+        buf_puts(b, "command");
         for (i = 0; i < AS_TUPLE(argv)->len; i++) {
-            if (i)
-                buf_putc(b, ' ');
+            buf_putc(b, ' ');
             sqv(b, AS_TUPLE(argv)->items[i]);
         }
         if (out) {
@@ -1391,20 +1425,20 @@ static void render_action(Buf *b, V act)
         buf_printf(b, "unset %s", AS_STR(field(act, "name"))->s);
     } else if (strcmp(op, "chdir") == 0) {
         buf_puts(b, "cd ");
-        sqv(b, field(act, "path"));
+        path_word(b, field(act, "path"));
     } else if (strcmp(op, "mkdir") == 0) {
         buf_puts(b, "mkdir -p");
         path_words(b, field(act, "paths"));
     } else if (strcmp(op, "copy") == 0) {
-        buf_puts(b, field(act, "recursive") ? "cp -a" : "cp");
+        buf_puts(b, field(act, "preserve") ? "cp -a" : field(act, "recursive") ? "cp -R" : "cp");
         path_words(b, field(act, "src"));
         buf_putc(b, ' ');
-        sqv(b, field(act, "dst"));
+        path_word(b, field(act, "dst"));
     } else if (strcmp(op, "move") == 0) {
         buf_puts(b, "mv");
         path_words(b, field(act, "src"));
         buf_putc(b, ' ');
-        sqv(b, field(act, "dst"));
+        path_word(b, field(act, "dst"));
     } else if (strcmp(op, "remove") == 0) {
         buf_puts(b, field(act, "recursive") ? "rm -rf" : "rm -f");
         path_words(b, field(act, "paths"));
@@ -1426,6 +1460,26 @@ static void render_action(Buf *b, V act)
         sqv(b, field(act, "target"));
         buf_putc(b, ' ');
         sqv(b, link);
+    } else if (strcmp(op, "symlink_each") == 0) {
+        V pfx = field(act, "prefix");
+        buf_puts(b, "for star_f in");
+        path_words(b, field(act, "targets"));
+        buf_puts(b, "; do [ -e \"$star_f\" ] || [ -L \"$star_f\" ] || continue; ");
+        if (field(act, "exclude")) {
+            buf_puts(b, "case \"${star_f##*/}\" in ");
+            path_word(b, field(act, "exclude"));
+            buf_puts(b, ") continue ;; esac; ");
+        }
+        buf_puts(b, "star_l=");
+        sqv(b, field(act, "dir"));
+        buf_putc(b, '/');
+        if (pfx)
+            sqv(b, pfx);
+        buf_puts(b, "\"${star_f##*/}\"; ");
+        if (field(act, "if_missing"))
+            buf_puts(b, "[ -e \"$star_l\" ] || [ -L \"$star_l\" ] || ");
+        buf_puts(b, field(act, "relative") ? "ln -s \"${star_f##*/}\" \"$star_l\"; done"
+                                            : "ln -s \"$star_f\" \"$star_l\"; done");
     } else if (strcmp(op, "chmod") == 0) {
         buf_printf(b, "chmod %s", AS_STR(field(act, "mode"))->s);
         path_words(b, field(act, "paths"));
