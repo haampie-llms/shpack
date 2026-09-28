@@ -28,28 +28,34 @@ version(
 
 build_system("generic")
 
-# 1.5.7: app-layer shared build via compiler-wrapper (final gcc 16).
-# 1.5.7-boot: toolchain-layer static build by gcc-boot-wrapper.
-depends_on("compiler-wrapper", when = "@=1.5.7", type = "build")
-depends_on("gmake", when = "@=1.5.7", type = "build")
-depends_on("gcc-boot-wrapper", when = "@=1.5.7-boot", type = "build")
-depends_on("glibc", when = "@=1.5.7-boot")
-depends_on("gmake", when = "@=1.5.7-boot", type = "build")
-depends_on("sed@4.9-musl", when = "@=1.5.7-boot", type = "build")
-depends_on("grep-boot", when = "@=1.5.7-boot", type = "build")
-depends_on("gawk@5.3.1", when = "@=1.5.7-boot", type = "build")
-depends_on("diffutils", when = "@=1.5.7-boot", type = "build")
-depends_on("findutils", when = "@=1.5.7-boot", type = "build")
-depends_on("tar@1.35-musl", when = "@=1.5.7-boot", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=1.5.7-boot", type = "build")
-depends_on("sed@4.9-musl", when = "@=1.5.7", type = "build")
-depends_on("grep-boot", when = "@=1.5.7", type = "build")
-depends_on("gawk@5.3.1", when = "@=1.5.7", type = "build")
-depends_on("diffutils", when = "@=1.5.7", type = "build")
-depends_on("findutils", when = "@=1.5.7", type = "build")
-depends_on("tar@1.35-musl", when = "@=1.5.7", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=1.5.7", type = "build")
 depends_on("dash", type = "build")
+
+# 1.5.7: app-layer shared build via compiler-wrapper (final gcc 16).
+when("@=1.5.7", [
+    depends_on("compiler-wrapper", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+])
+
+# 1.5.7-boot: toolchain-layer static build by gcc-boot-wrapper.
+when("@=1.5.7-boot", [
+    depends_on("gcc-boot-wrapper", type = "build"),
+    depends_on("glibc"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+])
 
 def edit(ctx):
     # zstd's Makefiles do `$(shell uname)` to pick the shared-lib soname/flags;

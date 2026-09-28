@@ -24,26 +24,33 @@ version(
 
 build_system("autotools")
 
-# 4.9-musl: GCC 4.7 against musl 1.1.24 (static). 4.9: the glibc sed, built with
-# the final gcc 16 via compiler-wrapper. Each pulls the matching xz for its source.
-depends_on("gcc-boot0", when = "@=4.9-musl", type = "build")
-depends_on("binutils-boot0", when = "@=4.9-musl", type = "build")
-depends_on("gmake", when = "@=4.9-musl", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=4.9-musl", type = "build")
-depends_on("compiler-wrapper", when = "@=4.9", type = "build")
-depends_on("gmake", when = "@=4.9", type = "build")
-depends_on("xz", when = "@=4.9", type = "build")
-depends_on("grep-boot", when = "@=4.9-musl", type = "build")
-depends_on("gawk-boot", when = "@=4.9-musl", type = "build")
-depends_on("diffutils", when = "@=4.9-musl", type = "build")
-depends_on("findutils", when = "@=4.9-musl", type = "build")
-depends_on("dash@0.5.12", when = "@=4.9-musl", type = "build")
-depends_on("grep-boot", when = "@=4.9", type = "build")
-depends_on("gawk@5.3.1", when = "@=4.9", type = "build")
-depends_on("diffutils", when = "@=4.9", type = "build")
-depends_on("findutils", when = "@=4.9", type = "build")
-depends_on("tar@1.35-musl", when = "@=4.9", type = "build")
-depends_on("dash", when = "@=4.9", type = "build")
+# Each version pulls the matching xz for its source.
+
+# 4.9: the glibc sed, built with the final gcc 16 via compiler-wrapper.
+when("@=4.9", [
+    depends_on("compiler-wrapper", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("xz", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("dash", type = "build"),
+])
+
+# 4.9-musl: GCC 4.7 against musl 1.1.24 (static).
+when("@=4.9-musl", [
+    depends_on("gcc-boot0", type = "build"),
+    depends_on("binutils-boot0", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk-boot", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("dash@0.5.12", type = "build"),
+])
 
 def configure_args(ctx):
     musl = ctx.satisfies("@=4.9-musl")

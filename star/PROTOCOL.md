@@ -47,7 +47,20 @@ parallel = False
 | `depends_on(spec, when=, type=)` | one dependency, `name` or `name@version` (exact). `type` is Spack's: `"build"`, `"link"`, `"run"`, `"test"` or a tuple of them; the default is `("build", "link")`. |
 | `patch(file, level=1, when=)` | apply `patches/<file>` with `-p<level>` |
 | `license(id, checked_by=, when=)` | an SPDX license identifier (`checked_by` is not kept) |
+| `when(cond, [...])` | Spack's `with when(cond):`. The list holds what `depends_on`, `patch`, `resource` and `license` return (or nested `when` calls); each of those directives' conditions becomes its own AND `cond`. Version lists intersect, and an empty intersection is an error. The result is written back as `@=V1,=V2 target=FAMILY:`. Returns the directives, so `when` nests. |
 | `build_system(*values, default=)` | `generic`, `makefile` or `autotools`, at most once. A value is a name or `conditional(name, ..., when=)`. A node builds with `default` (the first value unless given) if its condition holds, else with the first value whose condition does. Without the directive: `generic`. |
+
+Starlark has no `with` statement, hence `when()` as a call. The directives in
+its list run first, as arguments do, and `when` then narrows them:
+
+```python
+when("@=4.9-musl", [
+    depends_on("gcc-boot0", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+    when("target=aarch64:", [patch("arm64.patch")]),
+])
+when("@=4.9", [depends_on(t, type = "build") for t in ["gmake", "xz"]])
+```
 
 `when=` takes a subset of Spack's spec syntax, space separated: `@=VERSION`
 (exactly this version of the package), `@=V1,=V2,...` (any of these), and

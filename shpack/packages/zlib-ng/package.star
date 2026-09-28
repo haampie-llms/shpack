@@ -28,28 +28,34 @@ version(
 
 build_system("generic")
 
-# 2.3.3: app-layer shared build via compiler-wrapper (final gcc 16).
-# 2.3.3-boot: toolchain-layer static build by gcc-boot-wrapper.
-depends_on("compiler-wrapper", when = "@=2.3.3", type = "build")
-depends_on("gmake", when = "@=2.3.3", type = "build")
-depends_on("gcc-boot-wrapper", when = "@=2.3.3-boot", type = "build")
-depends_on("glibc", when = "@=2.3.3-boot")
-depends_on("gmake", when = "@=2.3.3-boot", type = "build")
-depends_on("sed@4.9-musl", when = "@=2.3.3-boot", type = "build")
-depends_on("grep-boot", when = "@=2.3.3-boot", type = "build")
-depends_on("gawk@5.3.1", when = "@=2.3.3-boot", type = "build")
-depends_on("diffutils", when = "@=2.3.3-boot", type = "build")
-depends_on("findutils", when = "@=2.3.3-boot", type = "build")
-depends_on("tar@1.35-musl", when = "@=2.3.3-boot", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=2.3.3-boot", type = "build")
-depends_on("sed@4.9-musl", when = "@=2.3.3", type = "build")
-depends_on("grep-boot", when = "@=2.3.3", type = "build")
-depends_on("gawk@5.3.1", when = "@=2.3.3", type = "build")
-depends_on("diffutils", when = "@=2.3.3", type = "build")
-depends_on("findutils", when = "@=2.3.3", type = "build")
-depends_on("tar@1.35-musl", when = "@=2.3.3", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=2.3.3", type = "build")
 depends_on("dash", type = "build")
+
+# 2.3.3: app-layer shared build via compiler-wrapper (final gcc 16).
+when("@=2.3.3", [
+    depends_on("compiler-wrapper", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+])
+
+# 2.3.3-boot: toolchain-layer static build by gcc-boot-wrapper.
+when("@=2.3.3-boot", [
+    depends_on("gcc-boot-wrapper", type = "build"),
+    depends_on("glibc"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("grep-boot", type = "build"),
+    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+])
 
 def install(ctx):
     # zlib-ng ships its own configure (not autotools); it honours $CC.
