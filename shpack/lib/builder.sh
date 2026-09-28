@@ -231,7 +231,8 @@ do_finalize() {
     # or 755 if executable at all (Spack's default install permissions too).
     chmod -R u=rwX,go=rX "$PREFIX"
     cd /
-    rm -rf "$stage_dir"
+    # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
+    [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
 }
 
 cmd_build_one() {
