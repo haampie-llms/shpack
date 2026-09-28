@@ -447,19 +447,22 @@ static V a_mkdir(Args *a)
     return mk_action("mkdir", 1, names, vals);
 }
 
-/* copy(src, dst, recursive = False, preserve = False): preserve keeps modes,
- * times and symlinks (cp -a) and implies recursive. */
+/* copy(src, dst, recursive = False, preserve = False, force = False):
+ * preserve keeps modes, times and symlinks (cp -a) and implies recursive;
+ * force replaces a destination that cannot be opened (cp -f). */
 static V a_copy(Args *a)
 {
-    V src, dst, rec = NULL, pres = NULL;
-    const char *names[] = {"src", "dst", "recursive", "preserve"};
-    V vals[4];
-    unpack_args(a, "src", &src, "dst", &dst, "recursive?", &rec, "preserve?", &pres, NULL);
+    V src, dst, rec = NULL, pres = NULL, force = NULL;
+    const char *names[] = {"src", "dst", "recursive", "preserve", "force"};
+    V vals[5];
+    unpack_args(a, "src", &src, "dst", &dst, "recursive?", &rec, "preserve?", &pres,
+                "force?", &force, NULL);
     vals[0] = paths_arg(src, "copy");
     vals[1] = (V)want_str(dst, "copy");
     vals[2] = rec && truth(rec) ? True : NULL;
     vals[3] = pres && truth(pres) ? True : NULL;
-    return mk_action("copy", 4, names, vals);
+    vals[4] = force && truth(force) ? True : NULL;
+    return mk_action("copy", 5, names, vals);
 }
 
 static V a_move(Args *a)
@@ -1431,6 +1434,8 @@ static void render_action(Buf *b, V act)
         path_words(b, field(act, "paths"));
     } else if (strcmp(op, "copy") == 0) {
         buf_puts(b, field(act, "preserve") ? "cp -a" : field(act, "recursive") ? "cp -R" : "cp");
+        if (field(act, "force"))
+            buf_puts(b, " -f");
         path_words(b, field(act, "src"));
         buf_putc(b, ' ');
         path_word(b, field(act, "dst"));
