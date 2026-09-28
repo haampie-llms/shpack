@@ -13,6 +13,18 @@ checker, so a recipe that only Python accepts never gets in.
 The Spack side is a prototype on the `star-recipes` branch of Spack. It loads
 this tree as a Package API v1 repository (`shpack/repo.yaml`).
 
+## Dependency types
+
+The recipes declare Spack's types (`type=`, `("build", "link")` by default),
+and both hosts derive a build's environment from them by Spack's rule
+(PROTOCOL.md, "Hosts"). The concretizer, though, is told that every edge is
+`build`. The bootstrap links two musls, glibc-boot and glibc, and two dashes
+into what Spack would make a single unification set, and duplicates of link
+dependencies are beyond it, under `duplicates: minimal` and `full` alike.
+Declared as build edges, shpack's DAG concretizes (the packages are tagged
+`build-tools`). The adapter keeps the recipe's types (`_star_deps`) for PATH,
+the compiler wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
+
 ## Status
 
 Spack built the full gcc 16 DAG (31 packages) from these recipes. It ran with
