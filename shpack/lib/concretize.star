@@ -17,6 +17,10 @@
 #     sources           "SHA FNAME URL" per distfile: the version's, its resources'
 #     patches           "FILE LEVEL" per patch that applies to this version and arch
 #     parallel          present, "false", for a recipe that sets parallel = False
+#   and for Spack (lib/spackdb.star, the prefix's .spack/spec.json):
+#     spack.json        the node as a Spack spec node, under its Spack hash
+#     spack-spec.json   a built node's spec.json: it and its closure
+#     explicit          present for the requested (root) nodes
 #   topo              all ids, dependencies before dependents
 #   roots             ids of the requested packages
 #   index             one line per node: NAME VERSION HASH KIND PREFIX
@@ -55,6 +59,33 @@ def _when_matches(when, version, arch = None):
         if term in _ARCHES and _ARCHES[term] != arch:
             return False
     return True
+
+_B32 = "abcdefghijklmnopqrstuvwxyz234567"
+_TARGETS = {"amd64": "x86_64", "aarch64": "aarch64"}
+
+def _b32(hexdigest):
+    """The first 32 characters of the lowercase base32 encoding of a digest, as
+    Spack spells its hashes (160 of the 256 bits)."""
+    out = []
+    for i in range(32):
+        bit = 5 * i
+        j = bit // 4
+        byte = int(hexdigest[j:j + 2], 16)
+        out.append(_B32[(byte >> (3 - bit % 4)) & 31])
+    return "".join(out)
+
+def _build_system(rec, version):
+    """The build system of this version, as star plan picks it."""
+    for d in rec["directives"]:
+        if d["directive"] != "build_system":
+            continue
+        for v in d["values"]:
+            if v["name"] == d["default"] and _when_matches(v["when"], version):
+                return v["name"]
+        for v in d["values"]:
+            if _when_matches(v["when"], version):
+                return v["name"]
+    return "generic"
 
 def _add(lst, x):
     if x not in lst:
@@ -148,11 +179,42 @@ def concretize(host, cfg, specs):
             n["closure"] = sorted({c: None for c in closure}.keys())
             n["manifest"] = manifest(r, f["edges"])
             n["recipe"] = build_inputs(r)
-        n["hash"] = host.sha256(n["manifest"])[:7]
-        n["prefix"] = r.prefix if r.kind == "external" else "%s/%s-%s" % (store, r.id, n["hash"])
+        # Spack's spelling of the hash: base32, 32 characters; stamps, logs and
+        # the tree use the first 7, as `spack find -l` shows them.
+        n["spack_hash"] = _b32(host.sha256(n["manifest"]))
+        n["hash"] = n["spack_hash"][:7]
+        # Spack's default layout, {platform}-{target}/{name}-{version}-{hash},
+        # so that Spack pointed at the store installs where shpack does.
+        n["prefix"] = r.prefix if r.kind == "external" else "%s/linux-%s/%s-%s" % (
+            store, _TARGETS.get(cfg["arch"], cfg["arch"]), r.id, n["spack_hash"])
+        n["spack"] = host.json(spack_node(r, n, f["edges"]))
         nodes[r.id] = n
         active.pop(r.id)
         topo.append(r.id)
+
+    def spack_node(r, n, edges):
+        """The node as a Spack spec (spec.json, .spack-db/index.json)."""
+        rec = record(r.name)
+        node = {
+            "name": r.name,
+            "version": r.version,
+            "arch": {"platform": "linux", "platform_os": cfg.get("platform_os", "shpack"),
+                     "target": _TARGETS.get(cfg["arch"], cfg["arch"])},
+            "namespace": cfg.get("namespace", "shpack"),
+            "parameters": {
+                "build_system": _build_system(rec, r.version) if rec else "generic",
+                "cflags": [], "cppflags": [], "cxxflags": [], "fflags": [], "ldflags": [],
+                "ldlibs": [],
+            },
+        }
+        if r.kind == "external":
+            node["external"] = {"path": r.prefix, "module": None, "extra_attributes": {}}
+        deps = [{"name": nodes[d]["name"], "hash": nodes[d]["spack_hash"],
+                 "parameters": {"deptypes": t.split(","), "virtuals": []}} for d, t in edges]
+        if deps:
+            node["dependencies"] = sorted(deps, key = lambda d: d["name"])
+        node["hash"] = n["spack_hash"]
+        return node
 
     def sources(r):
         """(sha256, fname, url) of the version's source and its resources."""
@@ -235,9 +297,20 @@ def concretize(host, cfg, specs):
         files[d + "path"] = compose_path(id) + "\n"
         for k, v in n.get("recipe", {}).items():
             files[d + k] = v
+        # The node as Spack sees it, for the database (spackdb.star); and, for
+        # a built node, the prefix's .spack/spec.json: it and its closure.
+        files[d + "spack.json"] = n["spack"] + "\n"
+        if n["kind"] == "built":
+            ids = [id] + n["closure"]
+            files[d + "spack-spec.json"] = (
+                '{"spec": {"_meta": {"version": 6}, "nodes": [' +
+                ", ".join([nodes[c]["spack"] for c in ids]) + "]}}\n")
     files["index"] = _lines(["%s %s %s %s %s" % (nodes[id]["name"], nodes[id]["version"],
                                                  nodes[id]["hash"], nodes[id]["kind"],
                                                  nodes[id]["prefix"]) for id in topo])
+    for id in roots:
+        if nodes[id]["kind"] == "built":
+            files["spec/" + id + "/explicit"] = ""   # as `spack install` marks its roots
     files["dag.mk"] = dagmk(cfg, nodes, topo, roots, compose_path)
     out = tree(nodes, roots)
     out += "concretized %d node(s); makefile at %s/dag.mk\n" % (len(topo), cfg["var"])
@@ -298,8 +371,10 @@ def dagmk(cfg, nodes, topo, roots, compose_path):
                    (wrap, cfg["shpack_root"], id, id))
         out.append('\t  || { echo "!! %s FAILED, tail of $(L)/%s.log:"; tail -n 40 $(L)/%s.log; exit 1; }' %
                    (id, id, id))
-        out.append("\t@test -f %s/.shpack/build.log || cp $(L)/%s.log %s/.shpack/build.log" %
-                   (prefix, id, prefix))
+        # the log of the build that made the prefix: not if shpack or Spack
+        # (which gzips it) left one already
+        out.append(("\t@test -f %s/.spack/spack-build-out.txt -o -f %s/.spack/spack-build-out.txt.gz " +
+                    "|| cp $(L)/%s.log %s/.spack/spack-build-out.txt") % (prefix, prefix, id, prefix))
         # Post-install marker, Spack-style, so the prefix is copy-pasteable.
         out.append('\t@echo "[+] %s %s@%s %s"' % (n["hash"], n["name"], n["version"], prefix))
         out.append("\t@touch $@")

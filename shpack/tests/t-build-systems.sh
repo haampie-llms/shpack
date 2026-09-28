@@ -155,28 +155,28 @@ shpack install mkpkg atpkg ootpkg actpkg > "$TESTDIR/install.log" 2>&1 \
     || { cat "$TESTDIR/install.log"; fail "install failed"; }
 
 S=$TESTDIR/store
-mh=$(index_field mkpkg 3); ah=$(index_field atpkg 3); oh=$(index_field ootpkg 3)
-assert_eq "$(cat "$S/mkpkg-1.0-$mh/share/data.out")" fixed "patched + makefile-built content"
+mp=$(index_field mkpkg 5); ap=$(index_field atpkg 5); op=$(index_field ootpkg 5)
+assert_eq "$(cat "$mp/share/data.out")" fixed "patched + makefile-built content"
 
-out=$S/atpkg-2.0-$ah/share/out.txt
-assert_contains "$out" "--prefix=$S/atpkg-2.0-$ah"
+out=$ap/share/out.txt
+assert_contains "$out" "--prefix=$ap"
 assert_contains "$out" "--disable-nls"
 assert_contains "$out" "CXXCPP=tcc -E"
 assert_contains "$out" "CONFIG_SHELL=$TEST_DASH_SH"
-assert_contains "$S/atpkg-2.0-$ah/.shpack/build.sh" "make SHELL=$TEST_DASH_SH -j1"
+assert_contains "$ap/.spack/shpack-build.sh" "make SHELL=$TEST_DASH_SH -j1"
 
-oout=$S/ootpkg-1.0-$oh/share/out.txt
+oout=$op/share/out.txt
 assert_contains "$oout" "/_build/sub"
-assert_contains "$oout" "--prefix=$S/ootpkg-1.0-$oh"
-assert_contains "$S/ootpkg-1.0-$oh/.shpack/build.sh" "../../configure"
+assert_contains "$oout" "--prefix=$op"
+assert_contains "$op/.spack/shpack-build.sh" "../../configure"
 
 # Starlark prefixes record the recipe and the executed plan
-assert_file "$S/mkpkg-1.0-$mh/.shpack/package.star"
-assert_file "$S/mkpkg-1.0-$mh/.shpack/build.sh"
+assert_file "$mp/.spack/repos/shpack/packages/mkpkg/package.star"
+assert_file "$mp/.spack/shpack-build.sh"
 
 # actions
-xh=$(index_field actpkg 3)
-X=$S/actpkg-1.0-$xh/share
+xp=$(index_field actpkg 5)
+X=$xp/share
 assert_contains "$X/hard.txt" "execl(\"$TEST_DASH_SH\", \"sh\", \"-c\", cmd);"
 assert_contains "$X/hard.txt" "[\"$TEST_DASH_SH\", \"-c\"]"
 assert_contains "$X/hard.txt" 'edited & \ | #'
@@ -195,9 +195,9 @@ assert_file "$X/d2/here"
 
 # per-version build system
 shpack install bspkg@1.0 > "$TESTDIR/bs1.log" 2>&1 || { cat "$TESTDIR/bs1.log"; fail "bspkg@1.0"; }
-assert_eq "$(cat "$S/bspkg-1.0-$(index_field bspkg 3)/share/data.out")" mk "makefile version"
+assert_eq "$(cat "$(index_field bspkg 5)/share/data.out")" mk "makefile version"
 shpack install bspkg@2.0 > "$TESTDIR/bs2.log" 2>&1 || { cat "$TESTDIR/bs2.log"; fail "bspkg@2.0"; }
-assert_contains "$S/bspkg-2.0-$(index_field bspkg 3)/share/out.txt" "--prefix=$S/bspkg-2.0-"
+assert_contains "$(index_field bspkg 5)/share/out.txt" "--prefix=$(index_field bspkg 5)"
 
 # A plan-time error (a directive called from a phase) fails the build.
 mkstar late <<'EOF2'

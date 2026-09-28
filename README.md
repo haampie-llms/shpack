@@ -46,8 +46,8 @@ line out for you:
 ```console
 $ ./run-local.sh
 ...
-[+] a062f54 gcc@16.1.0 /home/you/shpack/store/gcc-16.1.0-a062f54
-$ store/gcc-16.1.0-a062f54/bin/g++ hello.cc -o hello && ./hello
+[+] 4cxpi2c gcc@16.1.0 /home/you/shpack/store/linux-aarch64/gcc-16.1.0-4cxpi2cz2dru4e55iurmmmvmpvcylvxd
+$ store/linux-aarch64/gcc-16.1.0-4cxpi2cz2dru4e55iurmmmvmpvcylvxd/bin/g++ hello.cc -o hello && ./hello
 hello world
 ```
 
@@ -84,41 +84,41 @@ time -- store and state are shared on disk.
 ```
 ...
 ==> shpack install gcc
-79f8d53  [    ]  gcc@16.1.0
-a5f6526  [b   ]    gcc-boot-wrapper@16.1.0
-e184f01  [b r ]      gcc-boot2@16.1.0
-03a0cc9  [b   ]        gmake@4.4.1
-055307c  [b   ]          tcc@0.9.27 (external)
-9d99eb9  [bl  ]          musl@1.1.24 (external)
-36ad4e2  [b   ]          grep-boot@2.4
-219a904  [b   ]            dash@0.5.12 (external)
-6e1805c  [b   ]          gawk-boot@3.0.4
-f07ea20  [b   ]        diffutils@2.7
-a4127e6  [b   ]        findutils@4.2.33
-e324b73  [b   ]        gcc-boot1@9.5.0
-e11989f  [b   ]          gcc-boot0@4.7-2013.11
-99b6c72  [b r ]            binutils-boot0@2.30-musl
-bd87377  [b   ]              m4@1.4.7
-4af249a  [bl  ]            gmp@4.3.2
-3b5239f  [bl  ]            mpfr@2.4.2
-4c5138a  [bl  ]            mpc@1.0.3
-fddb1ab  [bl  ]          musl@1.2.5
-baf95b6  [bl  ]            linux-headers@6.9.1
-83b3d43  [b   ]              sed@4.9-musl
-5b66865  [b   ]                xz@5.2.5-musl
-eccf036  [b   ]          tar@1.35-musl
-1376e69  [b r ]        binutils-boot1@2.46.0-musl
-5b92169  [b   ]          gawk@5.3.1
-5446314  [bl  ]      glibc@2.43
-1801aa7  [b   ]        python@3.8.20
-a0ef9b1  [b   ]        bison@3.8.2
-8d986a5  [b   ]        dash@0.5.13.4
-9a4f414  [bl  ]          glibc@2.43-boot
-2ff07b9  [b   ]          dash-boot@0.5.12 (external)
-b767a7f  [b r ]    binutils@2.46.0
-256eb0c  [bl  ]      libstdcxx-boot1@16.1.0
-bf09790  [bl  ]      zlib-ng@2.3.3-boot
-397bcaf  [bl  ]      zstd@1.5.7-boot
+4cxpi2c  [    ]  gcc@16.1.0
+pzr5lqm  [b   ]    gcc-boot-wrapper@16.1.0
+xhecsx6  [b r ]      gcc-boot2@16.1.0
+6elkxfh  [b   ]        gmake@4.4.1
+avjqpsa  [b   ]          tcc@0.9.27 (external)
+twm6xh5  [bl  ]          musl@1.1.24 (external)
+rgir4f4  [b   ]          grep-boot@2.4
+egnjari  [b   ]            dash@0.5.12 (external)
+h6rz6lz  [b   ]          gawk-boot@3.0.4
+3zx5q53  [b   ]        diffutils@2.7
+y657jx4  [b   ]        findutils@4.2.33
+e3jq2gw  [b   ]        gcc-boot1@9.5.0
+f7v3s67  [b   ]          gcc-boot0@4.7-2013.11
+jli4iow  [b r ]            binutils-boot0@2.30-musl
+xdl3pl6  [b   ]              m4@1.4.7
+kfnhlob  [bl  ]            gmp@4.3.2
+q3s75ka  [bl  ]            mpfr@2.4.2
+fqxbfki  [bl  ]            mpc@1.0.3
+fzrl2hi  [bl  ]          musl@1.2.5
+4vp2eyy  [bl  ]            linux-headers@6.9.1
+cskrdly  [b   ]              sed@4.9-musl
+kfnzq2q  [b   ]                xz@5.2.5-musl
+p562sdc  [b   ]          tar@1.35-musl
+iw26mff  [b r ]        binutils-boot1@2.46.0-musl
+x67vjgi  [b   ]          gawk@5.3.1
+hvkz32y  [bl  ]      glibc@2.43
+d4senl5  [b   ]        python@3.8.20
+u64baoj  [b   ]        bison@3.8.2
+7gv2qwp  [b   ]        dash@0.5.13.4
+fbazrop  [bl  ]          glibc@2.43-boot
+f7yhxh6  [b   ]          dash-boot@0.5.12 (external)
+k3bqbga  [b r ]    binutils@2.46.0
+k3lar2d  [bl  ]      libstdcxx-boot1@16.1.0
+o5c4buc  [bl  ]      zlib-ng@2.3.3-boot
+c7xtxe4  [bl  ]      zstd@1.5.7-boot
 ```
 
 The column in brackets is the type of the dependency edge, as `spack spec -t`
@@ -223,7 +223,7 @@ implementation (or a future Spack) can evaluate the same recipes.
 ## Build systems and phases
 
 Every build runs: `fetch` (sha256-verify distfiles) -> `stage` (unpack to a
-scratch dir) -> `patch` -> plan -> the phases -> `finalize` (write `.shpack/`
+scratch dir) -> `patch` -> plan -> the phases -> `finalize` (write the `.spack/`
 metadata). The build systems are Starlark modules in `build_systems/`; a
 recipe overrides a phase by defining a function of the same name, and can
 call the default explicitly (`load("//build_systems/autotools.star",
@@ -243,7 +243,7 @@ and may only set environment variables. When a build step has to inspect
 build output, `sh(script)` is the escape hatch; t-lint counts its uses.
 
 `star plan` renders the actions as a plain script (`$VAR/spec/<id>/build.sh`,
-kept in the prefix as `.shpack/build.sh`), which the builder sources, so what
+kept in the prefix as `.spack/shpack-build.sh`), which the builder sources, so what
 ran is always there to read.
 
 ## Concretization and store
@@ -259,10 +259,26 @@ auxiliary files, the build-system modules it loads, the evaluator version,
 source checksums, target arch, and the hashes and types of all direct dependencies. Anything changing anywhere in a package's closure changes its
 hash.
 
-Every package installs into its own prefix `$STORE/<name>-<version>-<hash7>`,
-with metadata in `.shpack/` (spec, dep edges, the hash manifest, the recipe, the
-rendered plan, the build log) -- what a future `spack reindex` needs to reconstruct concrete specs
-from the store. Packages the kaem phase already installed (unhashed
+The store is a Spack install tree. Every package installs where Spack would
+put it, `$STORE/linux-<target>/<name>-<version>-<hash>` (the hash in Spack's
+spelling: 32 base32 characters, of which `shpack spec` and the logs show the
+first 7, as `spack find -l` does), with its metadata in `.spack/` as Spack
+keeps it: `spec.json`, `spack-build-out.txt`, the recipe under `repos/`, plus
+shpack's hash manifest and rendered plan. After every install, shpack merges
+what it installed into `$STORE/.spack-db/index.json` (`lib/spackdb.star`), so
+Spack reads the store as is -- no `spack reindex`:
+
+```console
+$ spack config add config:install_tree:root:$PWD/store
+$ spack find -l
+-- linux-shpack-aarch64 / no compilers --------------------------
+4cxpi2c gcc@16.1.0  ...
+```
+
+With `shpack/` as a Spack repository (`repo.yaml`, and the `star-recipes`
+branch of Spack for `package.star`), Spack can also rebuild a node in place
+(`spack install --overwrite /4cxpi2c`); shpack then treats the prefix as
+installed, and keeps Spack's record. Packages the kaem phase already installed (unhashed
 `$STORE/<name>-<version>` prefixes) are registered in `etc/externals`,
 Spack-`packages.yaml`-style; they resolve like any other candidate and
 contribute their identity to dependents' hashes.
@@ -288,12 +304,13 @@ shpack concretize <spec>...  resolve and emit dag.mk only
 shpack build-one <id>        build one node (internal, called from dag.mk)
 shpack env <name|id>         print a node's composed environment
 shpack find                  list concretized/installed packages
+shpack spack-db              record the last concretization's installs in .spack-db
 ```
 
 State lives under `$SHPACK_VAR` (default `$BUILDDIR/shpack`): `spec/<id>/` node dirs,
 `topo`, `index`, `dag.mk`, `stamps/`, `logs/`, `stage/`. The store itself is the
 only persistent output; `build-one` short-circuits when a node's prefix already
-carries `.shpack/spec`.
+carries `.spack/spec.json`, whoever installed it.
 
 ## Sandboxing
 

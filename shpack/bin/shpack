@@ -101,6 +101,8 @@ usage: shpack <command> [args]
                         from dag.mk recipes)
   env <name|id>         print the composed build environment of a node
   find                  list concretized/installed packages
+  spack-db              rewrite \$STORE/.spack-db/index.json from the store, so
+                        Spack reads it as its install tree (install does this)
   shell                 interactive store dash with `shpack` on hand
 EOF
 }
@@ -126,6 +128,7 @@ case $cmd in
     build-one)      cmd_build_one "$@" ;;
     env)            cmd_env "$@" ;;
     find)           cmd_find "$@" ;;
+    spack-db)       cmd_spack_db "$@" ;;
     shell)          cmd_shell "$@" ;;
     help|-h|--help) usage ;;
     *)              usage >&2; die "unknown command '$cmd'" ;;

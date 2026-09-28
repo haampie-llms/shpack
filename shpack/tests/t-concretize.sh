@@ -49,9 +49,13 @@ case $topo in
     *) fail "bad topo order: $topo" ;;
 esac
 
-# Built prefix embeds name-version-hash in the store.
+# Built prefixes follow Spack's layout, {platform}-{target}/{name}-{version}-{hash}:
+# the full (32 character) hash, whose first 7 the index shows.
 h=$(index_field tool 3)
-assert_eq "$(index_field tool 5)" "$TESTDIR/store/tool-0.5-$h" "tool prefix"
+case $(index_field tool 5) in
+    "$TESTDIR/store/linux-testarch/tool-0.5-$h"?????????????????????????) ;;
+    *) fail "tool prefix: $(index_field tool 5)" ;;
+esac
 
 # dag.mk: tool's stamp depends on libb's and liba's but not on the external.
 assert_contains "$SHPACK_VAR/dag.mk" "build-one tool-0.5"
@@ -61,7 +65,7 @@ esac
 
 # tool's composed PATH: own prefix first, then deps, then the external's bin.
 sh "$TESTROOT/bin/shpack" env tool > "$TESTDIR/env.out"
-assert_contains "$TESTDIR/env.out" "tool-0.5-$h/bin:"
+assert_contains "$TESTDIR/env.out" "$(index_field tool 5)/bin:"
 assert_contains "$TESTDIR/env.out" "/fake/ext-3.0/bin:"
 
 # Pinned version resolves exactly.
@@ -171,7 +175,7 @@ EOF
 shpack concretize top > /dev/null
 sh "$TESTROOT/bin/shpack" env top > "$TESTDIR/env.top"
 for p in tl rt rt2; do
-    assert_contains "$TESTDIR/env.top" "/$p-1.0-$(index_field $p 3)/bin:"
+    assert_contains "$TESTDIR/env.top" "$(index_field $p 5)/bin:"
 done
 for p in bh lk lk2; do
     if grep -q "/$p-1.0-" "$TESTDIR/env.top"; then

@@ -11,7 +11,8 @@
 #   plan     `star plan` evaluates the recipe's phases against this node's
 #            build context and renders the actions as $SPEC/build.sh
 #   <phases> source $SPEC/build.sh in this shell
-#   finalize write $PREFIX/.shpack metadata: spec, deps, manifest, recipe, plan
+#   finalize write $PREFIX/.spack, Spack's metadata: spec.json, the recipe,
+#            and shpack's manifest and plan
 
 # prefix_of NAME -> the store prefix of a dependency (direct or transitive).
 prefix_of() {
@@ -192,22 +193,13 @@ do_patch() {
 }
 
 do_finalize() {
-    local d
-    mkdir -p "$PREFIX/.shpack"
-    {
-        printf 'name %s\n' "$name"
-        printf 'version %s\n' "$version"
-        printf 'hash %s\n' "$hash"
-        printf 'arch %s\n' "$ARCH"
-    } > "$PREFIX/.shpack/spec"
-    : > "$PREFIX/.shpack/deps"
-    for d in $(cat "$SPEC/deps"); do
-        printf '%s-%s\n' "$d" "$(cat "$VAR/spec/$d/hash")" \
-            >> "$PREFIX/.shpack/deps"
-    done
-    cp "$SPEC/manifest" "$PREFIX/.shpack/manifest"
-    cp "$package_dir/package.star" "$PREFIX/.shpack/package.star"
-    cp "$SPEC/build.sh" "$PREFIX/.shpack/build.sh"
+    # Metadata as Spack keeps it, in .spack/: the recipe directory under
+    # repos/<namespace>/packages/, and shpack's own hash input and plan (the
+    # build log is copied in by dag.mk, as spack-build-out.txt).
+    mkdir -p "$PREFIX/.spack/repos/shpack/packages"
+    cp -R "$package_dir" "$PREFIX/.spack/repos/shpack/packages/$name"
+    cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
+    cp "$SPEC/build.sh" "$PREFIX/.spack/shpack-build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
     # world links via libtool, and they bake build-time paths / dependency
     # orderings that differ across builds. A glob, not find -- shpack core has no
@@ -217,6 +209,10 @@ do_finalize() {
     # the umask and whatever the tarballs carried: directories 755, files 644,
     # or 755 if executable at all (Spack's default install permissions too).
     chmod -R u=rwX,go=rX "$PREFIX"
+    # .spack/spec.json last: it marks the prefix installed, for shpack and
+    # Spack alike. The time goes to the database (lib/spackdb.star).
+    date +%s > "$SPEC/installation_time"
+    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
     cd /
     # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
     [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
@@ -232,7 +228,7 @@ cmd_build_one() {
     version=$(cat "$SPEC/version")
     hash=$(cat "$SPEC/hash")
     PREFIX=$(cat "$SPEC/prefix")
-    if [ -f "$PREFIX/.shpack/spec" ]; then
+    if [ -f "$PREFIX/.spack/spec.json" ]; then
         echo "$id is already installed in $PREFIX"
         return 0
     fi
