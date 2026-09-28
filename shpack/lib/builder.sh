@@ -226,6 +226,10 @@ do_finalize() {
     # orderings that differ across builds. A glob, not find -- shpack core has no
     # find; these always land directly in lib/ (and lib64/).
     rm -f "$PREFIX"/lib/*.la "$PREFIX"/lib64/*.la
+    # Modes are part of what a build produces, so fix them rather than inherit
+    # the umask and whatever the tarballs carried: directories 755, files 644,
+    # or 755 if executable at all (Spack's default install permissions too).
+    chmod -R u=rwX,go=rX "$PREFIX"
     cd /
     rm -rf "$stage_dir"
 }
