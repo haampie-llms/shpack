@@ -1,0 +1,42 @@
+# Lines of the upstream starlark-go tests that exercise features outside
+# star's dialect (see star/DIALECT.md). run.sh blanks them out -- blank, not
+# deleted, so reported line numbers still match the upstream files.
+#
+# file            lines     reason
+assign.star       278-290   hasfields: application type defined in Go's eval_test.go
+bool.star         62        float
+builtins.star     22-24     float
+builtins.star     28-31     float (abs of float; message mentions float)
+builtins.star     80-83     set
+builtins.star     123       int wider than 64 bits
+builtins.star     132       float
+builtins.star     136-137   float
+builtins.star     185-196   hasfields: application type defined in Go's eval_test.go
+builtins.star     211-224   hasfields: application type defined in Go's eval_test.go
+builtins.star     198-204   set
+control.star      56-64     fibonacci: infinite iterable defined in Go's eval_test.go
+function.star     84-86     hasfields: application type defined in Go's eval_test.go
+function.star     113-115   set
+int.star          14-15     int wider than 64 bits
+int.star          18-19     int wider than 64 bits
+int.star          72-73     float (x /= -2)
+int.star          99        float
+int.star          104-105   int wider than 64 bits
+int.star          152       int wider than 64 bits
+int.star          158       int wider than 64 bits
+int.star          213       int wider than 64 bits (overflow is reported before the shift limit)
+int.star          217-232   float (maxint32 / 2)
+int.star          235-239   int wider than 64 bits
+int.star          242       int wider than 64 bits
+int.star          257       float
+list.star         162-169   hasfields: application type defined in Go's eval_test.go
+misc.star         52-53     float
+string.star       26        float
+string.star       145       float
+string.star       192       float
+string.star       418-419   set
+string.star       389-392   non-ASCII case/class predicates (ASCII-only in this dialect)
+string.star       446-447   non-ASCII case mapping (ASCII-only in this dialect)
+string.star       451-454   non-ASCII case mapping (ASCII-only in this dialect)
+string.star       458-461   non-ASCII case mapping (ASCII-only in this dialect)
+string.star       465-469   non-ASCII case mapping (ASCII-only in this dialect)

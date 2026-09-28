@@ -1,0 +1,11 @@
+Vendored from https://github.com/google/starlark-go (BSD-3-Clause, see LICENSE),
+master at 89a6a09411d5c7a33409dc050c2fecdf8f4eca8f (2026-09-08T19:18:01Z):
+
+  starlark/testdata/{assign,bool,builtins,control,dict,function,int,list,
+                     misc,module,recursion,string,tuple,while}.star
+  starlarktest/assert.star
+
+The files are unmodified. Lines exercising features outside star's dialect
+(floats, sets, bytes, ints wider than 64 bits, non-ASCII case mapping, and
+test types defined in Go) are blanked at test time from the list in
+./exclusions; see ../run.sh.
