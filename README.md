@@ -206,7 +206,10 @@ several versions with different pinned deps:
 version("4.7-2013.11", sha256 = "...", url = "...")
 version("8.5.0", sha256 = "...", url = "...")
 depends_on("mpfr@2.4.2", when = "@=4.7-2013.11")
-depends_on("mpfr@3.1.6", when = "@=8.5.0")
+when("@=8.5.0", [                   # Spack's `with when("@=8.5.0"):`
+    depends_on("mpfr@3.1.6"),
+    depends_on("gmake", type = "build"),
+])
 ```
 
 Evaluation is pure. A recipe sees only its own text, the modules it loads

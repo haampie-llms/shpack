@@ -34,28 +34,34 @@ build_system("autotools")
 # another version of itself.
 depends_on("gawk-boot", type = "build")
 depends_on("grep-boot", type = "build")
-# 5.3.1: gcc 9.5 + binutils 2.30. Modern sed/tar: 5.3.1's configure needs sed -E
-# and its tarball is xz.
-depends_on("gcc-boot1", when = "@=5.3.1", type = "build")
-depends_on("binutils-boot0", when = "@=5.3.1", type = "build")
-depends_on("gmake", when = "@=5.3.1", type = "build")
-depends_on("sed@4.9-musl", when = "@=5.3.1", type = "build")
-depends_on("tar@1.35-musl", when = "@=5.3.1", type = "build")
-depends_on("xz@5.2.5-musl", when = "@=5.3.1", type = "build")
+
 # 5.3.2: gcc 16 via compiler-wrapper, with the glibc sed/tar/xz build tools.
-depends_on("compiler-wrapper", when = "@=5.3.2", type = "build")
-depends_on("gmake", when = "@=5.3.2", type = "build")
-depends_on("sed", when = "@=5.3.2", type = "build")
-depends_on("tar", when = "@=5.3.2", type = "build")
-depends_on("xz", when = "@=5.3.2", type = "build")
 # replace_bin_sh (below) compiles the shell path into the gawk binary: 5.3.2
 # (glibc) ships the clean dash, 5.3.1 the bootstrap one.
-depends_on("diffutils", when = "@=5.3.2", type = "build")
-depends_on("findutils", when = "@=5.3.2", type = "build")
-depends_on("dash", when = "@=5.3.2", type = "build")
-depends_on("diffutils", when = "@=5.3.1", type = "build")
-depends_on("findutils", when = "@=5.3.1", type = "build")
-depends_on("dash@0.5.12", when = "@=5.3.1", type = "build")
+when("@=5.3.2", [
+    depends_on("compiler-wrapper", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed", type = "build"),
+    depends_on("tar", type = "build"),
+    depends_on("xz", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("dash", type = "build"),
+])
+
+# 5.3.1: gcc 9.5 + binutils 2.30. Modern sed/tar: 5.3.1's configure needs sed -E
+# and its tarball is xz.
+when("@=5.3.1", [
+    depends_on("gcc-boot1", type = "build"),
+    depends_on("binutils-boot0", type = "build"),
+    depends_on("gmake", type = "build"),
+    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("diffutils", type = "build"),
+    depends_on("findutils", type = "build"),
+    depends_on("dash@0.5.12", type = "build"),
+])
 
 def edit(ctx):
     # gawk's system()/getline/print-to-cmd execl a hardcoded "/bin/sh", which the

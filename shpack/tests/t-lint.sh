@@ -19,14 +19,31 @@ for f in bin/shpack lib/*.sh; do
     fi
 done
 
-# Every built recipe must declare a shell dep: builder.sh requires it (the build
-# always runs make/patch-shebangs) and there is no ambient-shell fallback.
-for f in packages/*/package.star; do
-    if ! grep -qE '^depends_on\(.*"dash(-boot)?(@[^"]*)?"' "$f"; then
-        echo "no dash dependency in $f" >&2
-        bad=1
-    fi
-done
+# Every version of every recipe must declare a direct shell dep: builder.sh
+# requires it (the build always runs make/patch-shebangs) and there is no
+# ambient-shell fallback. Checked on star's record, so that when("@=V", [...])
+# blocks count for their versions.
+if [ -n "${STAR:-}" ]; then
+    for d in packages/*/; do
+        n=${d%/}; n=${n##*/}
+        missing=$("$STAR" recipe --repo packages --root . --format shpack "$n" | awk '
+            /^## /  { s = $2; next }
+            s == "versions" { v[++nv] = $1 }
+            s == "deps" && $3 ~ /^dash(-boot)?(@|$)/ { w[++nw] = $1 }
+            END {
+                for (i = 1; i <= nv; i++) {
+                    ok = 0
+                    for (j = 1; j <= nw; j++)
+                        if (w[j] == "-" || index("," w[j] ",", "," v[i] ",")) ok = 1
+                    if (!ok) print v[i]
+                }
+            }')
+        if [ -n "$missing" ]; then
+            echo "no dash dependency in $n for: $missing" >&2
+            bad=1
+        fi
+    done
+fi
 for d in packages/*/; do
     if [ ! -f "$d/package.star" ]; then
         echo "no package.star in $d" >&2

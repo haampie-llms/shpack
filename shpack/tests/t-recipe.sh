@@ -124,6 +124,43 @@ if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
 fi
 assert_contains "$TESTDIR/bad.log" "want build, link, run or test"
 
+# when(cond, [directives]): Spack's `with when()`. Conditions AND with the
+# directives' own; version lists intersect; blocks nest.
+mkstar wpkg <<'EOF2'
+version("1")
+version("2")
+version("3")
+depends_on("dash")
+when("@=1,=2", [
+    depends_on("liba", type = "build"),
+    depends_on("cdep", when = "@=2,=3"),
+    when("target=aarch64:", [patch("x.patch", level = 0)]),
+])
+when("@=3", [depends_on(t, type = "build") for t in ["libb", "tool"]])
+EOF2
+mkdir -p "$SHPACK_REPO/wpkg/patches" && : > "$SHPACK_REPO/wpkg/patches/x.patch"
+"$STAR" recipe --repo "$SHPACK_REPO" --root "$SHPACK_STAR_ROOT" --out "$TESTDIR" wpkg \
+    || fail "wpkg: star recipe failed"
+assert_eq "$(cat "$TESTDIR/deps")" "- build,link dash
+1,2 build liba
+2 build,link cdep
+3 build libb
+3 build tool" "when() deps state"
+assert_eq "$(cat "$TESTDIR/patches")" "x.patch level=0 when=1,2 arch=aarch64" "when() patches state"
+shpack concretize wpkg@2 > /dev/null || fail "wpkg@2 must concretize"
+index_field cdep 2 > /dev/null || fail "wpkg@2 must depend on cdep"
+index_field liba 2 > /dev/null || fail "wpkg@2 must depend on liba"
+
+for bad in 'when("@=1", [version("2")])' \
+           'when("@=1", [depends_on("liba", when = "@=2")])' \
+           'when("target=aarch64:", [depends_on("liba")])' \
+           'when("@1:", [depends_on("liba")])'; do
+    printf 'version("1")\n%s\n' "$bad" | mkstar wbad
+    if shpack concretize wbad > "$TESTDIR/wbad.log" 2>&1; then
+        fail "must be rejected: $bad"
+    fi
+done
+
 mkstar late <<'EOF2'
 version("1.0")
 build_system("generic")

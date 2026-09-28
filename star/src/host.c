@@ -202,6 +202,17 @@ static void no_space(Str *s, const char *what)
             star_error("%s: %s must not contain whitespace: \"%s\"", what, what, s->s);
 }
 
+/* The value of a directive that when() can constrain: a struct naming the
+ * directive's index in the record. */
+static V handle(Directive *d)
+{
+    Str *names[1];
+    V vals[1];
+    names[0] = intern("index");
+    vals[0] = mk_int(d - dirs);
+    return mk_struct("directive", 1, names, vals);
+}
+
 /* license("GPL-3.0-or-later", when=...), as in Spack (checked_by= is not kept) */
 static V d_license(Args *a)
 {
@@ -213,7 +224,7 @@ static V d_license(Args *a)
     if (d->a->len == 0)
         star_error("license: empty license identifier");
     set_when(d, when, 0);
-    return None;
+    return handle(d);
 }
 
 static V d_version(Args *a)
@@ -252,7 +263,7 @@ static V d_resource(Args *a)
     if (!d->url && !d->fname)
         star_error("resource: url= or fname= is required");
     set_when(d, when, 0);
-    return None;
+    return handle(d);
 }
 
 /* type= as in Spack: one of "build", "link", "run", "test", or a tuple or
@@ -313,7 +324,7 @@ static V d_depends_on(Args *a)
         star_error("depends_on: invalid spec \"%s\"", d->a->s);
     d->types = dep_types(type);
     set_when(d, when, 0);
-    return None;
+    return handle(d);
 }
 
 static V d_patch(Args *a)
@@ -327,7 +338,7 @@ static V d_patch(Args *a)
     if (level && level != None)
         d->level = want_int(level, "patch");
     set_when(d, when, 1);
-    return None;
+    return handle(d);
 }
 
 /* conditional("makefile", when="@=3.0.4"), as in Spack: build system values
@@ -867,12 +878,117 @@ static V a_filter_file(Args *a)
     return mk_action("filter_file", 3, names, vals);
 }
 
+/* ------------------------------------------------------------------- when() -- */
+
+/* d's condition AND (ver, arch), written back in canonical form:
+ * "@=V1,=V2 target=FAMILY:". Version lists intersect, in d's order. */
+static void conjoin(Directive *d, const char *ver, const char *arch, Str *cond)
+{
+    const char *v = d->when_ver, *ar = d->when_arch;
+    Buf b;
+    if (ver && v) {
+        Buf vb;
+        const char *p = v;
+        buf_init(&vb);
+        while (*p) {
+            const char *e = strchr(p, ',');
+            int len = e ? (int)(e - p) : (int)strlen(p);
+            char *one = arena_strndup(p, len);
+            if (when_matches(ver, one)) {
+                if (vb.len)
+                    buf_putc(&vb, ',');
+                buf_puts(&vb, one);
+            }
+            if (!e)
+                break;
+            p = e + 1;
+        }
+        if (!vb.len)
+            star_error("when(\"%s\"): no version satisfies both it and the %s's when=\"%s\"",
+                       cond->s, d->kind, d->when->s);
+        v = buf_cstr(&vb);
+    } else if (ver) {
+        v = ver;
+    }
+    if (arch && ar && strcmp(arch, ar) != 0)
+        star_error("when(\"%s\"): the %s's when=\"%s\" asks for another target",
+                   cond->s, d->kind, d->when->s);
+    if (arch)
+        ar = arch;
+    if (ar && strcmp(d->kind, "patch") != 0)
+        star_error("when(\"%s\"): target= constraints are only supported on patch()", cond->s);
+    buf_init(&b);
+    if (v) {
+        const char *p = v;
+        buf_puts(&b, "@");
+        while (*p) {
+            const char *e = strchr(p, ',');
+            int len = e ? (int)(e - p) : (int)strlen(p);
+            buf_puts(&b, p == v ? "=" : ",=");
+            buf_put(&b, p, len);
+            if (!e)
+                break;
+            p = e + 1;
+        }
+    }
+    if (ar) {
+        if (b.len)
+            buf_putc(&b, ' ');
+        buf_puts(&b, strcmp(ar, "amd64") == 0 ? "target=x86_64:" : "target=aarch64:");
+    }
+    d->when = AS_STR(mk_str(b.p, b.len));
+    d->when_ver = v;
+    d->when_arch = ar;
+}
+
+static void when_apply(V x, const char *ver, const char *arch, Str *cond, V out, int depth)
+{
+    int i;
+    if (TYPE(x) == T_LIST || TYPE(x) == T_TUPLE) {
+        V l = to_list(x);
+        if (depth > 8)
+            star_error("when: lists nested too deeply");
+        for (i = 0; i < AS_LIST(l)->len; i++)
+            when_apply(AS_LIST(l)->items[i], ver, arch, cond, out, depth + 1);
+        return;
+    }
+    if (TYPE(x) == T_STRUCT && strcmp(((Struct *)x)->ctor, "directive") == 0) {
+        int64_t idx = AS_INT(((Struct *)x)->vals[0]);
+        conjoin(&dirs[idx], ver, arch, cond);
+        list_append(out, x);
+        return;
+    }
+    star_error("when: got %s, want the value of depends_on, patch, resource or license "
+               "(or a list of them)", type_name(x));
+}
+
+/* when("@=4.9-musl", [depends_on(...), patch(...), ...]): Spack's `with when()`.
+ * The directives in the list have been declared already; their conditions
+ * become their own AND this one. Returns them, so that when() nests. */
+static V d_when(Args *a)
+{
+    V cond, items, out;
+    const char *ver, *arch, *err;
+    Str *c;
+    unpack_positional(a, 2, 2, &cond, &items);
+    if (!loading)
+        star_error("when: directives may only be called while the recipe loads");
+    c = want_str(cond, "when");
+    if (parse_when(c, &ver, &arch, &err) < 0)
+        star_error("when(\"%s\"): %s", c->s, err);
+    if (TYPE(items) != T_LIST && TYPE(items) != T_TUPLE)
+        star_error("when: got %s, want a list of directives", type_name(items));
+    out = mk_list(0);
+    when_apply(items, ver, arch, c, out, 0);
+    return out;
+}
+
 /* ---------------------------------------------------------------- predeclared -- */
 
 static const struct { const char *name; BuiltinFn fn; } host_fns[] = {
     {"version", d_version}, {"resource", d_resource}, {"depends_on", d_depends_on},
     {"patch", d_patch}, {"license", d_license}, {"build_system", d_build_system},
-    {"conditional", d_conditional},
+    {"conditional", d_conditional}, {"when", d_when},
     {"run", a_run}, {"sh", a_sh}, {"setenv", a_setenv}, {"prepend_path", a_prepend_path},
     {"unsetenv", a_unsetenv}, {"chdir", a_chdir}, {"mkdir", a_mkdir}, {"copy", a_copy},
     {"move", a_move}, {"remove", a_remove}, {"symlink", a_symlink}, {"hardlink", a_hardlink},
