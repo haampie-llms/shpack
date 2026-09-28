@@ -13,7 +13,7 @@
 set -e
 out=${1:?usage: corpus.sh OUTDIR}
 here=$(cd "$(dirname "$0")" && pwd)
-root=$here/../../shpack
+root=$(cd "$here/../../shpack" && pwd)
 repo=$root/packages
 STAR=${STAR:-star}
 mkdir -p "$out"
