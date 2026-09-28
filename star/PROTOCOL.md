@@ -186,6 +186,21 @@ order, action fields sorted by name. Two backends agree when their JSON is
 byte-identical over a set of recipes. That is the test for swapping one in.
 
 The shpack host consumes other renderings of the same records.
-`--format shpack` writes the directive record as the state files under
-`$VAR/recipe/<name>/`. `--format sh` renders the plan as a POSIX sh script
+`--format shpack` writes the directive record as state files, one per kind:
+
+| file | lines |
+|---|---|
+| `versions` | `VER SHA FNAME URL` (first declared = default) |
+| `resources` | `WHEN SHA FNAME URL` |
+| `deps` | `WHEN TYPES SPEC` (`TYPES`: a comma-separated subset of build,link,run,test) |
+| `patches` | `FILE level=N [when=VERS] [arch=ARCH]` |
+| `license` | `WHEN ID` |
+| `parallel` | `false`, for `parallel = False` |
+| `build_directory`, `description`, `homepage` | the value |
+| `loads` | the `//`-modules the recipe loads, relative to the root |
+
+`-` marks an absent field; `WHEN` is the versions of a `when="@=V1,=V2"`,
+comma separated, or `-` for all versions. (shpack itself no longer reads
+these: its concretizer, `shpack/lib/concretize.star`, gets the record as a
+value from `star concretize`.) `--format sh` renders the plan as a POSIX sh script
 that uses two helpers the builder defines, `star_sed` and `star_rglob`.

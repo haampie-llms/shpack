@@ -6,8 +6,7 @@
  *
  *   star concretize --repo DIR --root DIR --module FILE --cfg CFG.star --out VAR SPEC...
  *
- * host.recipe(name)       the directive record of a recipe (None without one);
- *                         also writes VAR/recipe/<name>/, as `star recipe --out`
+ * host.recipe(name)       the directive record of a recipe (None without one)
  * host.files(name)        [[path, sha256], ...] of the files in the package
  *                         directory: depth first, names sorted bytewise,
  *                         dotfiles and dangling symlinks skipped
@@ -133,10 +132,9 @@ static V h_recipe(Args *a)
 {
     V name;
     Str *n;
-    Buf path, out;
+    Buf path;
     struct stat st;
     V rec;
-    FILE *f;
     unpack_positional(a, 1, 1, &name);
     n = want_str(name, "recipe");
     buf_init(&path);
@@ -152,17 +150,6 @@ static V h_recipe(Args *a)
     load_recipe(arena_strdup(n->s));
     load_build_systems();
     rec = record_value();
-    if (conc_out) {
-        buf_init(&out);
-        buf_printf(&out, "%s/recipe/%s", conc_out, n->s);
-        mkdir_p(buf_cstr(&out));
-        opt_out = buf_cstr(&out);
-        emit_shpack();
-        buf_puts(&out, "/.loaded");
-        if ((f = fopen(buf_cstr(&out), "w")) != NULL)
-            fclose(f);
-        opt_out = NULL;
-    }
     reset_modules();
     return rec;
 }

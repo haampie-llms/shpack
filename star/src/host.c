@@ -4,8 +4,8 @@
  *
  *   star recipe --repo DIR --root DIR [--format shpack|json] [--out DIR] NAME
  *       Load DIR/NAME/package.star and print (or write into --out) its
- *       directive record: in the line formats lib/repo.sh has always written
- *       under $VAR/recipe/NAME/ (shpack), or as canonical JSON.
+ *       directive record: in shpack's state-file line format
+ *       (--format shpack, see PROTOCOL.md), or as canonical JSON.
  *
  *   star plan --repo DIR --root DIR --ctx FILE [--format sh|json] NAME
  *       Evaluate the recipe's phases against the build context in FILE (a
