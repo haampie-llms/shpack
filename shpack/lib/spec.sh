@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 #
-# spec.sh -- spec naming and content hashing.
+# spec.sh -- spec naming, and the file helpers the shell side shares.
 #
 # A spec names a package at a concrete version. On the command line and in
 # depends_on it is written "name" or "name@version"; once resolved it becomes
@@ -9,25 +9,14 @@
 # back into parts: the name and version of a node are stored separately in its
 # state dir.
 #
-# Every concretized node gets a DAG hash: sha256 over a canonical manifest of
-# everything that determines its build -- the recipe text and auxiliary files,
-# the source tarball checksums, the target architecture, and the (name,
-# version, hash) of every direct dependency -- truncated to 7 hex digits.
-# Dependency hashes make it a Merkle hash: any change anywhere in a package's
-# closure changes its store prefix $STORE/<name>-<version>-<hash7>.
-
-# sha256_file FILE -> print the 64-hex digest.
-# Works with both GNU sha256sum and the stage0 (mescc-tools-extra) one: each
-# prints "digest  filename".
-sha256_file() {
-    set -- $(sha256sum "$1")
-    printf '%s\n' "$1"
-}
-
-# truncate7 STRING -> first 7 characters.
-truncate7() {
-    printf '%.7s\n' "$1"
-}
+# Every concretized node gets a DAG hash (lib/concretize.star): sha256 over a
+# canonical manifest of everything that determines its build -- the recipe
+# text and auxiliary files, the modules it loads, the source tarball
+# checksums, the target architecture, and the (name, version, hash, types) of
+# every direct dependency -- truncated to 7 hex digits. Dependency hashes make
+# it a Merkle hash: any change anywhere in a package's closure changes its
+# store prefix $STORE/<name>-<version>-<hash7>. host.files in star lists the
+# package files as walk_files below does.
 
 # walk_files DIR [REL] -> print the relative paths of all regular files under
 # DIR, depth-first. Glob expansion order is deterministic (sorted), which is
@@ -64,11 +53,6 @@ member_line() {
         if [ "$line" = "$1" ]; then return 0; fi
     done < "$2"
     return 1
-}
-
-# add_line STRING FILE -- append STRING to FILE unless it is already a line.
-add_line() {
-    member_line "$1" "$2" || printf '%s\n' "$1" >> "$2"
 }
 
 # when_matches WHEN VERSION -> true if a recipe's when (as star writes it: the

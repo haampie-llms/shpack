@@ -16,4 +16,6 @@
 #include "src/strmethods.c"
 #include "src/regex.c"
 #include "src/host.c"
+#include "src/sha256.c"
+#include "src/concretize.c"
 #include "src/main.c"

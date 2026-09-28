@@ -17,6 +17,9 @@ the compiler exists, and evaluates every package recipe with it.
   pinned.
 - [PROTOCOL.md](PROTOCOL.md): the recipe protocol, which is the contract any
   other backend has to meet to replace star.
+- `src/concretize.c`: the host of shpack's concretizer, which is Starlark
+  (`shpack/lib/concretize.star`): the recipes, file hashes (`src/sha256.c`)
+  and externals go in, the state files come out.
 - `tests/run.sh`: starlark-go's conformance tests (vendored, BSD-3) plus
   star's own dialect tests.
 
@@ -26,6 +29,7 @@ the compiler exists, and evaluates every package recipe with it.
     star test [--xfail LIST] FILE.star...
     star recipe --repo DIR --root DIR [--format shpack|json] [--out DIR] NAME
     star plan   --repo DIR --root DIR --ctx CTX.star [--format sh|json] NAME
+    star concretize --repo DIR --root DIR --module FILE --cfg CFG.star --out DIR SPEC...
 
 Memory comes from an arena that is never freed, because one process
 evaluates one thing and exits. An error unwinds with a traceback

@@ -14,6 +14,7 @@
 
 extern FILE *print_stream;
 int host_main(int argc, char **argv);   /* host.c */
+int concretize_main(int argc, char **argv);    /* concretize.c */
 
 static void usage(void)
 {
@@ -21,7 +22,9 @@ static void usage(void)
           "       star run FILE\n"
           "       star test [--xfail LIST] FILE...\n"
           "       star recipe --repo DIR --root DIR [--format shpack|json] [--out DIR] NAME\n"
-          "       star plan --repo DIR --root DIR --ctx FILE [--format sh|json] NAME\n", stderr);
+          "       star plan --repo DIR --root DIR --ctx FILE [--format sh|json] NAME\n"
+          "       star concretize --repo DIR --root DIR --module FILE --cfg FILE --out DIR SPEC...\n",
+          stderr);
     exit(2);
 }
 
@@ -416,6 +419,8 @@ int main(int argc, char **argv)
         return cmd_test(argc - 2, argv + 2);
     if (strcmp(argv[1], "recipe") == 0 || strcmp(argv[1], "plan") == 0)
         return host_main(argc - 1, argv + 1);
+    if (strcmp(argv[1], "concretize") == 0)
+        return concretize_main(argc - 1, argv + 1);
     usage();
     return 2;
 }
