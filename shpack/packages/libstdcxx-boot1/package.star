@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""Intermediate aarch64 libstdc++ (static-only) from GCC 16 source. gcc-boot2
+was built --disable-libstdc++-v3, but binutils (gprofng) and gcc's build tools
+need to link one."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "Intermediate aarch64 libstdc++ (static-only) from GCC 16 source. "
-                  + "gcc-boot2 was built --disable-libstdc++-v3, but binutils "
-                  + "(gprofng) and gcc's build tools need to link one.",
-    homepage = "https://gcc.gnu.org/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://gcc.gnu.org/"
+license("GPL-3.0-or-later")
 
 # Same GCC 16 source as gcc-boot2 / gcc; only libstdc++-v3 is configured.
 version(
@@ -23,20 +22,18 @@ build_system("generic")
 # linux-headers: autoconf CPP sanity check. findutils: libtool merges the
 # convenience archives into libstdc++.a by enumerating objects with find --
 # without it the archive ships only compatibility*.o and C++ links break.
-depends_on(
-    "gcc-boot-wrapper",
-    "glibc",
-    "linux-headers",
-    "gmake",
-    "sed@4.9-musl",
-    "grep@2.4-musl",
-    "gawk@5.3.1",
-    "diffutils",
-    "findutils",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-)
-depends_on("dash")
+depends_on("gcc-boot-wrapper", type = "build")
+depends_on("glibc")
+depends_on("linux-headers")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def setup_build_environment(ctx):
     # libstdc++ #include_next <stdlib.h> etc. must reach glibc's headers.

@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""GNU make 4.4.1: replaces the kaem-built make 3.82 for all heavy downstream
+builds (fixes 3.82's parallel races; fifo jobserver)"""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GNU make 4.4.1: replaces the kaem-built make 3.82 for all heavy " +
-                  "downstream builds (fixes 3.82's parallel races; fifo jobserver)",
-    homepage = "https://www.gnu.org/software/make/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://www.gnu.org/software/make/"
+license("GPL-3.0-or-later")
 
 # make 3.82 is a kaem-phase external (etc/externals); this recipe is the
 # parallel-safe upgrade and the spec named by SHPACK_BOOTSTRAP_MAKE.
@@ -19,8 +18,11 @@ version(
 
 build_system("autotools")
 
-depends_on("tcc", "musl@1.1.24", "grep@2.4-musl", "gawk@3.0.4")
-depends_on("dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 def configure_args(ctx):
     # No binutils ar yet and config.guess cannot probe this environment: pin the

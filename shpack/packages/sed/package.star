@@ -1,17 +1,15 @@
 # SPDX-License-Identifier: MIT
 
+"""GNU sed 4.9 -- a modern stream editor. The stage0 seed sed is 4.0.9 (2003),
+too old for 'sed -E' and other scripts the kernel headers, glibc and gcc build
+machinery rely on. Two builds from one recipe: 4.9-musl is the static musl sed
+the bootstrap chain uses; 4.9 is the glibc sed built with the final gcc 16, the
+user-facing one."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GNU sed 4.9 -- a modern stream editor. The stage0 seed sed is "
-                  + "4.0.9 (2003), too old for 'sed -E' and other scripts the kernel "
-                  + "headers, glibc and gcc build machinery rely on. Two builds from "
-                  + "one recipe: 4.9-musl is the static musl sed the bootstrap chain "
-                  + "uses; 4.9 is the glibc sed built with the final gcc 16, the "
-                  + "user-facing one.",
-    homepage = "https://www.gnu.org/software/sed/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://www.gnu.org/software/sed/"
+license("GPL-3.0-or-later")
 
 version(
     "4.9",
@@ -28,16 +26,24 @@ build_system("autotools")
 
 # 4.9-musl: GCC 4.7 against musl 1.1.24 (static). 4.9: the glibc sed, built with
 # the final gcc 16 via compiler-wrapper. Each pulls the matching xz for its source.
-depends_on(
-    "gcc-boot0",
-    "binutils-boot0",
-    "gmake",
-    "xz@5.2.5-musl",
-    when = "@=4.9-musl",
-)
-depends_on("compiler-wrapper", "gmake", "xz", when = "@=4.9")
-depends_on("dash@0.5.12", when = "@=4.9-musl")
-depends_on("dash", when = "@=4.9")
+depends_on("gcc-boot0", when = "@=4.9-musl", type = "build")
+depends_on("binutils-boot0", when = "@=4.9-musl", type = "build")
+depends_on("gmake", when = "@=4.9-musl", type = "build")
+depends_on("xz@5.2.5-musl", when = "@=4.9-musl", type = "build")
+depends_on("compiler-wrapper", when = "@=4.9", type = "build")
+depends_on("gmake", when = "@=4.9", type = "build")
+depends_on("xz", when = "@=4.9", type = "build")
+depends_on("grep-boot", when = "@=4.9-musl", type = "build")
+depends_on("gawk-boot", when = "@=4.9-musl", type = "build")
+depends_on("diffutils", when = "@=4.9-musl", type = "build")
+depends_on("findutils", when = "@=4.9-musl", type = "build")
+depends_on("dash@0.5.12", when = "@=4.9-musl", type = "build")
+depends_on("grep-boot", when = "@=4.9", type = "build")
+depends_on("gawk@5.3.1", when = "@=4.9", type = "build")
+depends_on("diffutils", when = "@=4.9", type = "build")
+depends_on("findutils", when = "@=4.9", type = "build")
+depends_on("tar@1.35-musl", when = "@=4.9", type = "build")
+depends_on("dash", when = "@=4.9", type = "build")
 
 def configure_args(ctx):
     musl = ctx.satisfies("@=4.9-musl")

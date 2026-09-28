@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""clingo (potassco) @spack branch -- the ASP grounder/solver Spack uses as its
+concretizer. Built with the CPython C-API bindings (no cffi/libffi), the same
+configuration as Spack's clingo-bootstrap@spack."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "clingo (potassco) @spack branch -- the ASP grounder/solver Spack "
-                  + "uses as its concretizer. Built with the CPython C-API bindings (no "
-                  + "cffi/libffi), the same configuration as Spack's "
-                  + "clingo-bootstrap@spack.",
-    homepage = "https://potassco.org/clingo/",
-    license = "MIT",
-)
+homepage = "https://potassco.org/clingo/"
+license("MIT")
 
 # The @spack git commit, which builds pyclingo without cffi. GitHub archives omit
 # submodule contents, so clasp and its nested libpotassco come as resources,
@@ -35,8 +33,20 @@ build_system("generic")
 
 # bison/re2c generate the gringo parser/lexer; cmake drives the build; cpython
 # provides headers + libpython for the bindings.
-depends_on("compiler-wrapper", "cpython", "re2c", "cmake", "bison")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("cpython")
+depends_on("re2c", type = "build")
+depends_on("cmake", type = "build")
+depends_on("bison", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def edit(ctx):
     # do_stage cd'd into whichever flat dir sorted first; work from clingo's.

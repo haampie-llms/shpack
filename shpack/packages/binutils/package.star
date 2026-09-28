@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""GNU binutils 2.46.0, glibc-linked: the as/ld baked into the final GCC. Built
+by gcc-boot-wrapper against glibc 2.43; the bootstrap stages are binutils-boot0
+(2.30, musl) and binutils-boot1 (2.46.0, musl)."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "GNU binutils 2.46.0, glibc-linked: the as/ld baked into the final "
-                  + "GCC. Built by gcc-boot-wrapper against glibc 2.43; the bootstrap "
-                  + "stages are binutils-boot0 (2.30, musl) and binutils-boot1 (2.46.0, musl).",
-    homepage = "https://www.gnu.org/software/binutils/",
-    license = "GPL-3.0-or-later",
-)
+homepage = "https://www.gnu.org/software/binutils/"
+license("GPL-3.0-or-later")
 
 version(
     "2.46.0",
@@ -20,23 +19,22 @@ build_system("autotools")
 
 # linux-headers: autoconf CPP sanity check. libstdcxx-boot1: gprofng is C++ and
 # links libstdc++.a.
-depends_on(
-    "gcc-boot-wrapper",
-    "glibc",
-    "linux-headers",
-    "libstdcxx-boot1",
-    "binutils-boot1",
-    "zlib-ng@2.3.3-boot",
-    "zstd@1.5.7-boot",
-    "bison",
-    "gmake",
-    "sed@4.9-musl",
-    "grep@2.4-musl",
-    "gawk@5.3.1",
-    "diffutils",
-    "tar@1.35-musl",
-)
-depends_on("dash")
+depends_on("gcc-boot-wrapper", type = "build")
+depends_on("glibc")
+depends_on("linux-headers")
+depends_on("libstdcxx-boot1")
+depends_on("binutils-boot1", type = "build")
+depends_on("zlib-ng@2.3.3-boot")
+depends_on("zstd@1.5.7-boot")
+depends_on("bison", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("findutils", type = "build")
+depends_on("dash", type = "build")
 
 def setup_build_environment(ctx):
     # glibc headers/libs for the wrapped boot compiler. gprofng is C++ but

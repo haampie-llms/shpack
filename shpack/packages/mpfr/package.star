@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: MIT
 
+"""Multiple-precision floating-point library (gcc prerequisite)"""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "Multiple-precision floating-point library (gcc prerequisite)",
-    homepage = "https://www.mpfr.org/",
-    license = "LGPL-2.1-or-later",
-)
+homepage = "https://www.mpfr.org/"
+license("LGPL-2.1-or-later")
 
 version(
     "2.4.2",
@@ -16,16 +15,15 @@ version(
 
 build_system("autotools")
 
-depends_on(
-    "tcc",
-    "musl@1.1.24",
-    "gmake",
-    "binutils-boot0",
-    "gmp",
-    "grep@2.4-musl",
-    "gawk@3.0.4",
-)
-depends_on("dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+depends_on("gmake", type = "build")
+depends_on("binutils-boot0", type = "build")
+depends_on("gmp")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 def configure_args(ctx):
     # config.sub predates musl; the triple is cosmetic for this native

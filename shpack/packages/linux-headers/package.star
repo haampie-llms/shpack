@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""Linux kernel uapi headers (asm/, asm-generic/, linux/, ...), sanitized with
+'make headers_install' -- no kernel compile"""
+
 load("//build_systems/lib.star", "kernel_arch")
 
-package(
-    description = "Linux kernel uapi headers (asm/, asm-generic/, linux/, ...), "
-                  + "sanitized with 'make headers_install' -- no kernel compile",
-    homepage = "https://www.kernel.org/",
-    license = "GPL-2.0-only",
-)
+homepage = "https://www.kernel.org/"
+license("GPL-2.0-only")
 
 version(
     "6.9.1",
@@ -19,8 +18,15 @@ build_system("generic")
 
 # Built by the chain's GCC 4.7 (HOSTCC compiles scripts/basic/fixdep and
 # scripts/unifdef). make = gmake (musl-linked, drives the jobserver).
-depends_on("gcc-boot0", "gmake", "sed@4.9-musl", "xz@5.2.5-musl")
-depends_on("dash@0.5.12")
+depends_on("gcc-boot0", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 def install(ctx):
     # Linux ARCH uses its own arch names: aarch64 -> arm64 (selects the arm64

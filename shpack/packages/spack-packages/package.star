@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "spack-packages -- Spack's package recipe repository (the 'builtin' "
-                  + "namespace), split out of Spack proper since v1.0. A develop "
-                  + "snapshot (repo API v2.2) to match the Spack v1.2 snapshot. Pure "
-                  + "data (package.py files); nothing is compiled.",
-    homepage = "https://github.com/spack/spack-packages",
-    license = "Apache-2.0 OR MIT",
-)
+"""spack-packages -- Spack's package recipe repository (the 'builtin'
+namespace), split out of Spack proper since v1.0. A develop snapshot (repo API
+v2.2) to match the Spack v1.2 snapshot. Pure data (package.py files); nothing
+is compiled."""
+
+homepage = "https://github.com/spack/spack-packages"
+license("Apache-2.0 OR MIT")
 
 # develop head (commit deb4f17, 2026-06-19), repo API v2.2, paired with the
 # Spack v1.2 snapshot. Vendored locally so `spack spec` resolves packages with
@@ -23,8 +22,8 @@ build_system("generic")
 
 # Modern tar: the GitHub tarball carries a pax_global_header the seed tar 1.12
 # can't parse.
-depends_on("tar")
-depends_on("dash")
+depends_on("tar", type = "build")
+depends_on("dash", type = "build")
 
 def install(ctx):
     # Spack registers repos/spack_repo/builtin (contains repo.yaml); copy the

@@ -15,7 +15,6 @@ mkdir -p "$TESTDIR/src/mkpkg-1.0"
 printf 'broken\n' > "$TESTDIR/src/mkpkg-1.0/data.in"
 sha=$(tarball mkpkg-1.0)
 mkstar mkpkg <<EOF2
-package()
 version("1.0", sha256 = "$sha", url = "http://example.invalid/mkpkg-1.0.tar.gz")
 build_system("makefile")
 depends_on("dash")
@@ -59,11 +58,10 @@ mkdir -p "$TESTDIR/src/atpkg-2.0"
 fakeconf "$TESTDIR/src/atpkg-2.0"
 sha=$(tarball atpkg-2.0)
 mkstar atpkg <<EOF2
-package()
 version("2.0", sha256 = "$sha", url = "http://example.invalid/atpkg-2.0.tar.gz")
 build_system("autotools")
 depends_on("dash")
-parallel(False)
+parallel = False
 def configure_args(ctx):
     # arguments may contain spaces
     return ["--disable-nls", "--enable-static", "CXXCPP=tcc -E"]
@@ -76,11 +74,10 @@ mkdir -p "$TESTDIR/src/ootpkg-1.0"
 fakeconf "$TESTDIR/src/ootpkg-1.0"
 sha=$(tarball ootpkg-1.0)
 mkstar ootpkg <<EOF2
-package()
 version("1.0", sha256 = "$sha", url = "http://example.invalid/ootpkg-1.0.tar.gz")
 build_system("autotools")
 depends_on("dash")
-build_directory("_build/sub")
+build_directory = "_build/sub"
 EOF2
 
 # per-version build systems
@@ -90,11 +87,12 @@ sha10=$(tarball bspkg-1.0)
 fakeconf "$TESTDIR/src/bspkg-2.0"
 sha20=$(tarball bspkg-2.0)
 mkstar bspkg <<EOF2
-package()
 version("1.0", sha256 = "$sha10", url = "http://example.invalid/bspkg-1.0.tar.gz")
 version("2.0", sha256 = "$sha20", url = "http://example.invalid/bspkg-2.0.tar.gz")
-build_system("makefile", when = "@=1.0")
-build_system("autotools", when = "@=2.0")
+build_system(
+    conditional("makefile", when = "@=1.0"),
+    conditional("autotools", when = "@=2.0"),
+)
 depends_on("dash")
 EOF2
 mkdir -p "$SHPACK_REPO/bspkg/files"
@@ -114,7 +112,6 @@ printf 'r\n' > "$TESTDIR/src/actpkg-1.0/res-9/file"
 sha=$(tarball actpkg-1.0)
 mkstar actpkg <<EOF2
 load("//build_systems/lib.star", "replace_bin_sh")
-package()
 version("1.0", sha256 = "$sha", url = "http://example.invalid/actpkg-1.0.tar.gz")
 build_system("generic")
 depends_on("dash")
@@ -204,7 +201,6 @@ assert_contains "$S/bspkg-2.0-$(index_field bspkg 3)/share/out.txt" "--prefix=$S
 
 # A plan-time error (a directive called from a phase) fails the build.
 mkstar late <<'EOF2'
-package()
 version("1.0")
 build_system("generic")
 depends_on("dash")

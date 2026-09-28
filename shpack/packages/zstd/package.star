@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""Zstandard 1.5.7 -- a fast lossless compressor: the zstd CLI plus libzstd.
+Built at the gcc-16 layer via the upstream Makefile."""
+
 load("//build_systems/lib.star", "uname_shim")
 
-package(
-    description = "Zstandard 1.5.7 -- a fast lossless compressor: the zstd CLI plus "
-                  + "libzstd. Built at the gcc-16 layer via the upstream Makefile.",
-    homepage = "https://facebook.github.io/zstd/",
-    license = "BSD-3-Clause OR GPL-2.0-or-later",
-)
+homepage = "https://facebook.github.io/zstd/"
+license("BSD-3-Clause OR GPL-2.0-or-later")
 
 # GitHub source archive (extracts zstd-1.5.7/).
 version(
@@ -31,9 +30,26 @@ build_system("generic")
 
 # 1.5.7: app-layer shared build via compiler-wrapper (final gcc 16).
 # 1.5.7-boot: toolchain-layer static build by gcc-boot-wrapper.
-depends_on("compiler-wrapper", "gmake", when = "@=1.5.7")
-depends_on("gcc-boot-wrapper", "glibc", "gmake", when = "@=1.5.7-boot")
-depends_on("dash")
+depends_on("compiler-wrapper", when = "@=1.5.7", type = "build")
+depends_on("gmake", when = "@=1.5.7", type = "build")
+depends_on("gcc-boot-wrapper", when = "@=1.5.7-boot", type = "build")
+depends_on("glibc", when = "@=1.5.7-boot")
+depends_on("gmake", when = "@=1.5.7-boot", type = "build")
+depends_on("sed@4.9-musl", when = "@=1.5.7-boot", type = "build")
+depends_on("grep-boot", when = "@=1.5.7-boot", type = "build")
+depends_on("gawk@5.3.1", when = "@=1.5.7-boot", type = "build")
+depends_on("diffutils", when = "@=1.5.7-boot", type = "build")
+depends_on("findutils", when = "@=1.5.7-boot", type = "build")
+depends_on("tar@1.35-musl", when = "@=1.5.7-boot", type = "build")
+depends_on("xz@5.2.5-musl", when = "@=1.5.7-boot", type = "build")
+depends_on("sed@4.9-musl", when = "@=1.5.7", type = "build")
+depends_on("grep-boot", when = "@=1.5.7", type = "build")
+depends_on("gawk@5.3.1", when = "@=1.5.7", type = "build")
+depends_on("diffutils", when = "@=1.5.7", type = "build")
+depends_on("findutils", when = "@=1.5.7", type = "build")
+depends_on("tar@1.35-musl", when = "@=1.5.7", type = "build")
+depends_on("xz@5.2.5-musl", when = "@=1.5.7", type = "build")
+depends_on("dash", type = "build")
 
 def edit(ctx):
     # zstd's Makefiles do `$(shell uname)` to pick the shared-lib soname/flags;

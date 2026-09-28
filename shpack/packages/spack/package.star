@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "Spack v1.2.0 (releases/v1.2 snapshot) -- the package manager, "
-                  + "installed into the store and wired to run on the shpack-built "
-                  + "CPython with the shpack-built clingo as its concretizer, so it "
-                  + "never bootstraps prebuilt clingo. The 'builtin' package repo is "
-                  + "overridden to the vendored spack-packages, so 'spack spec' works "
-                  + "offline.",
-    homepage = "https://spack.io/",
-    license = "Apache-2.0 OR MIT",
-)
+"""Spack v1.2.0 (releases/v1.2 snapshot) -- the package manager, installed into
+the store and wired to run on the shpack-built CPython with the shpack-built
+clingo as its concretizer, so it never bootstraps prebuilt clingo. The
+'builtin' package repo is overridden to the vendored spack-packages, so 'spack
+spec' works offline."""
+
+homepage = "https://spack.io/"
+license("Apache-2.0 OR MIT")
 
 # releases/v1.2 head (commit 3d24b94, 2026-06-11); __version__ is 1.2.0.dev0.
 # GitHub commit archive -> stable checksum.
@@ -26,11 +24,24 @@ build_system("generic")
 # the 'builtin' repo; gcc is the compiler Spack auto-detects. The rest are the
 # gcc-16/glibc userland (Spack otherwise assumes the host's), put on the launcher
 # PATH -- bare names, so each resolves to its user-facing (glibc) version.
-depends_on("cpython", "clingo", "spack-packages", "gcc")
-depends_on("coreutils", "grep", "sed", "gawk")
-depends_on("tar", "xz", "bzip2", "gzip", "patch", "unzip", "zstd", "git")
+depends_on("cpython", type = ("build", "run"))
+depends_on("clingo", type = ("build", "run"))
+depends_on("spack-packages", type = ("build", "run"))
+depends_on("gcc", type = ("build", "run"))
+depends_on("coreutils", type = ("build", "run"))
+depends_on("grep", type = ("build", "run"))
+depends_on("sed", type = ("build", "run"))
+depends_on("gawk", type = ("build", "run"))
+depends_on("tar", type = ("build", "run"))
+depends_on("xz", type = ("build", "run"))
+depends_on("bzip2", type = ("build", "run"))
+depends_on("gzip", type = ("build", "run"))
+depends_on("patch", type = ("build", "run"))
+depends_on("unzip", type = ("build", "run"))
+depends_on("zstd", type = ("build", "run"))
+depends_on("git", type = ("build", "run"))
 # The launcher is a #!$sh script, so the clean glibc dash is a runtime dep.
-depends_on("dash")
+depends_on("dash", type = ("build", "run"))
 
 def install(ctx):
     py = ctx.dep("cpython").prefix

@@ -4,7 +4,6 @@
 . "$(dirname "$0")/common.sh"
 
 mkstar liba <<'EOF'
-package()
 version("1.0")
 build_system("generic")
 def install(ctx):
@@ -12,7 +11,6 @@ def install(ctx):
 EOF
 
 mkstar libb <<'EOF'
-package()
 version("2.0")
 build_system("generic")
 depends_on("liba")
@@ -21,7 +19,6 @@ def install(ctx):
 EOF
 
 mkstar tool <<'EOF'
-package()
 version("0.5")
 build_system("generic")
 depends_on("libb")
@@ -63,21 +60,18 @@ shpack concretize tool > /dev/null
 # when=VER must hash differently (different resolved deps -> different
 # manifest), with no manifest code change.
 mkstar cdep-x <<'EOF'
-package()
 version("1.0")
 build_system("generic")
 def install(ctx):
     return []
 EOF
 mkstar cdep-y <<'EOF'
-package()
 version("1.0")
 build_system("generic")
 def install(ctx):
     return []
 EOF
 mkstar cmulti <<'EOF'
-package()
 version("4.7")
 version("8.5")
 build_system("generic")

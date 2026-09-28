@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""Perl 5.40.2 -- build dependency of OpenSSL (its Configure and build
+generators are Perl). Core interpreter only; the optional DB/gdbm extensions
+Spack's perl pulls in aren't needed here."""
+
 load("//build_systems/lib.star", "cpu", "uname_shim")
 
-package(
-    description = "Perl 5.40.2 -- build dependency of OpenSSL (its Configure and "
-                  + "build generators are Perl). Core interpreter only; the optional "
-                  + "DB/gdbm extensions Spack's perl pulls in aren't needed here.",
-    homepage = "https://www.perl.org/",
-    license = "Artistic-1.0-Perl OR GPL-1.0-or-later",
-)
+homepage = "https://www.perl.org/"
+license("Artistic-1.0-Perl OR GPL-1.0-or-later")
 
 version(
     "5.40.2",
@@ -20,8 +19,17 @@ build_system("generic")
 
 # Configure leans on awk and grep, neither in the bootstrap base PATH, and probes
 # for `comm` (kit-completeness check) -- coreutils supplies it.
-depends_on("compiler-wrapper", "coreutils", "gawk", "grep@2.4-musl", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("coreutils", type = "build")
+depends_on("gawk", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def edit(ctx):
     # `cat`/`pwd` from the coreutils dep: the first on this build's PATH.

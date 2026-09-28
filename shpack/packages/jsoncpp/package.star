@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "JsonCpp 1.9.7 -- C++ library for reading/writing JSON. Static "
-                  + "libjsoncpp only, built without cmake/meson.",
-    homepage = "https://github.com/open-source-parsers/jsoncpp",
-    license = "MIT",
-)
+"""JsonCpp 1.9.7 -- C++ library for reading/writing JSON. Static libjsoncpp
+only, built without cmake/meson."""
+
+homepage = "https://github.com/open-source-parsers/jsoncpp"
+license("MIT")
 
 version(
     "1.9.7",
@@ -16,8 +15,16 @@ version(
 
 build_system("generic")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def install(ctx):
     # -std=c++17 so the std::string_view Value overloads land in the archive;

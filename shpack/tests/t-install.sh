@@ -12,7 +12,6 @@ sha=$(sha256sum "$TESTDIR/distfiles/tarpkg-1.0.tar.gz")
 sha=${sha%% *}
 
 mkstar liba <<'EOF'
-package()
 version("1.0")
 build_system("generic")
 depends_on("dash")
@@ -25,23 +24,24 @@ EOF
 
 # gmake stand-in: exercises SHPACK_BOOTSTRAP_MAKE's two-stage scheduling.
 mkstar gmake <<'EOF'
-package()
 version("4.4.1")
 build_system("generic")
-depends_on("liba", "dash")
+depends_on("liba")
+depends_on("dash")
 def install(ctx):
     return [mkdir(ctx.prefix + "/bin")]
 EOF
 
 mkstar tarpkg <<EOF
-package()
 version(
     "1.0",
     sha256 = "$sha",
     url = "http://example.invalid/tarpkg-1.0.tar.gz",
 )
 build_system("generic")
-depends_on("liba", "gmake@4.4.1", "dash")
+depends_on("liba")
+depends_on("gmake@4.4.1")
+depends_on("dash")
 def install(ctx):
     return [
         # Runs inside the unpacked source dir; the dep's bin must be on PATH.
@@ -92,7 +92,6 @@ assert_contains "$SHPACK_VAR/logs/tarpkg-1.0.log" "already installed"
 
 # Corrupt distfile is rejected.
 mkstar badpkg <<EOF
-package()
 version(
     "1.0",
     sha256 = "0000000000000000000000000000000000000000000000000000000000000000",

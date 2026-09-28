@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "Info-ZIP unzip 6.0 -- the unzip CLI for .zip archives. Ancient "
-                  + "(2009) K&R C, so it needs -std=gnu89 and a couple of -Wno-error "
-                  + "knobs to compile with gcc 16.",
-    homepage = "https://infozip.sourceforge.net/UnZip.html",
-    license = "Info-ZIP",
-)
+"""Info-ZIP unzip 6.0 -- the unzip CLI for .zip archives. Ancient (2009) K&R C,
+so it needs -std=gnu89 and a couple of -Wno-error knobs to compile with gcc 16.
+"""
+
+homepage = "https://infozip.sourceforge.net/UnZip.html"
+license("Info-ZIP")
 
 # Info-ZIP's tarball is unzip60.tar.gz (version digits joined), extracting unzip60/.
 version(
@@ -19,8 +18,16 @@ build_system("generic")
 
 # compiler-wrapper supplies gcc 16 + glibc. Builds from unix/Makefile via the
 # `generic` target, which runs Info-ZIP's unix/configure feature probe first.
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 # Upstream/distros carry many CVE/hardening patches for unzip 6.0; not
 # build-blocking, deferred here. Revisit before feeding untrusted input.

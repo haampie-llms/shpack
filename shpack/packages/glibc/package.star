@@ -1,18 +1,16 @@
 # SPDX-License-Identifier: MIT
 
+"""glibc 2.43 -- the production aarch64 libc, built by the crippled
+gcc-16-boot0. Second half of the musl->glibc transition; every later cap stage
+links against this. Two builds from one recipe: 2.43-boot is a throwaway built
+with the bootstrap shell; 2.43 is the final libc, identical except its
+ldd/mtrace/sotruss/tzselect/ xtrace scripts point at a clean, glibc-linked dash
+instead of the tcc/musl bootstrap one."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "glibc 2.43 -- the production aarch64 libc, built by the crippled "
-                  + "gcc-16-boot0. Second half of the musl->glibc transition; every "
-                  + "later cap stage links against this. Two builds from one recipe: "
-                  + "2.43-boot is a throwaway built with the bootstrap shell; 2.43 is "
-                  + "the final libc, identical except its ldd/mtrace/sotruss/tzselect/ "
-                  + "xtrace scripts point at a clean, glibc-linked dash instead of the "
-                  + "tcc/musl bootstrap one.",
-    homepage = "https://www.gnu.org/software/libc/",
-    license = "LGPL-2.1-or-later",
-)
+homepage = "https://www.gnu.org/software/libc/"
+license("LGPL-2.1-or-later")
 
 version(
     "2.43",
@@ -31,26 +29,25 @@ build_system("generic")
 # binutils-boot1 as/ld; kernel headers via --with-headers. Needs python
 # (gen-as-const), bison+m4 (intl/plural.c), make >= 4, gawk@5.3.1 (configure
 # rejects gawk < 3.1.2).
-depends_on(
-    "gcc-boot2",
-    "binutils-boot1",
-    "linux-headers",
-    "gmake",
-    "python",
-    "bison",
-    "m4",
-    "sed@4.9-musl",
-    "gawk@5.3.1",
-    "grep@2.4-musl",
-    "diffutils",
-    "tar@1.35-musl",
-    "xz@5.2.5-musl",
-)
+depends_on("gcc-boot2", type = "build")
+depends_on("binutils-boot1", type = "build")
+depends_on("linux-headers")
+depends_on("gmake", type = "build")
+depends_on("python", type = "build")
+depends_on("bison", type = "build")
+depends_on("m4", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
 # glibc bakes a dash into its shipped scripts (ldd, mtrace, ...). 2.43 ships the
 # clean dash; 2.43-boot breaks the dash->glibc cycle, so it uses the bootstrap
 # dash@0.5.12 external (a leaf, hence no cycle). $sh follows whichever is declared.
-depends_on("dash", when = "@=2.43")
-depends_on("dash@0.5.12", when = "@=2.43-boot")
+depends_on("findutils", type = "build")
+depends_on("dash", when = "@=2.43", type = "build")
+depends_on("dash@0.5.12", when = "@=2.43-boot", type = "build")
 
 def install(ctx):
     headers = ctx.dep("linux-headers").prefix

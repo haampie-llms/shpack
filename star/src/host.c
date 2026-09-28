@@ -30,22 +30,31 @@ static const char *opt_repo, *opt_root, *opt_ctx, *opt_out, *opt_format;
 /* ------------------------------------------------------------ recipe record -- */
 
 typedef struct Directive {
-    const char *kind;       /* version resource depends_on patch build_system ... */
-    Str *a;                 /* main operand: version, spec, file, name, dir */
+    const char *kind;       /* version resource depends_on patch license build_system */
+    Str *a;                 /* main operand: version, spec, file, license, default */
     Str *sha256, *url, *fname;
     Str *when;              /* verbatim when= string, or NULL */
-    const char *when_ver;   /* translated: exact version, or NULL */
+    const char *when_ver;   /* translated: exact versions, comma separated, or NULL */
     const char *when_arch;  /* translated: amd64/aarch64, or NULL */
     int64_t level;
-    int flag;               /* parallel */
+    int types;              /* depends_on: DT_* bits */
+    int nvalues;            /* build_system: its values, each with a when */
+    struct Directive *values;
     int line;
 } Directive;
 
+/* dependency types, as in Spack; a dependency is ("build", "link") by default */
+enum { DT_BUILD = 1, DT_LINK = 2, DT_RUN = 4, DT_TEST = 8 };
+static const char *dt_names[] = {"build", "link", "run", "test", NULL};
+
 static Directive *dirs;
 static int ndirs, dircap;
-static Str *pkg_description, *pkg_homepage, *pkg_license;
+static const char *recipe_name;
+/* read from the recipe module once it has loaded: its docstring, and the
+ * globals homepage, parallel and build_directory (Spack's class attributes) */
+static Str *pkg_description, *pkg_homepage, *pkg_build_directory;
+static int pkg_parallel = 1;
 static int loading;         /* directives are callable only while loading */
-static int package_called;
 
 static Directive *new_directive(const char *kind)
 {
@@ -67,8 +76,10 @@ static Directive *new_directive(const char *kind)
 
 /* when= accepts a subset of Spack's spec syntax, space separated:
  *   @=VERSION        exactly this version of the package
+ *   @=V1,=V2,...     any of these exact versions
  *   target=FAMILY:   amd64 is x86_64:, aarch64 is aarch64:
- * Returns 0 on success; *err is set otherwise. */
+ * *ver becomes the versions joined by commas. Returns 0 on success; *err is
+ * set otherwise. */
 static int parse_when(Str *w, const char **ver, const char **arch, const char **err)
 {
     const char *p = w->s, *end = w->s + w->len;
@@ -86,11 +97,32 @@ static int parse_when(Str *w, const char **ver, const char **arch, const char **
             p++;
         n = (int)(p - tok);
         if (n > 2 && tok[0] == '@' && tok[1] == '=') {
+            Buf vb;
+            const char *q = tok + 1, *tend = tok + n;
             if (*ver) {
                 *err = "more than one @= constraint";
                 return -1;
             }
-            *ver = arena_strndup(tok + 2, n - 2);
+            buf_init(&vb);
+            /* =V1,=V2,...: every element an exact version */
+            while (q < tend) {
+                const char *e = q;
+                while (e < tend && *e != ',')
+                    e++;
+                if (e - q < 2 || *q != '=') {
+                    *err = "use @=V1,=V2 for a list of exact versions (version ranges are not supported)";
+                    return -1;
+                }
+                if (vb.len)
+                    buf_putc(&vb, ',');
+                buf_put(&vb, q + 1, (int)(e - q - 1));
+                q = e < tend ? e + 1 : e;
+                if (e < tend && q == tend) {
+                    *err = "trailing comma in version list";
+                    return -1;
+                }
+            }
+            *ver = buf_cstr(&vb);
         } else if (n == 14 && memcmp(tok, "target=x86_64:", 14) == 0) {
             *arch = "amd64";
         } else if (n == 15 && memcmp(tok, "target=aarch64:", 15) == 0) {
@@ -122,6 +154,25 @@ static void set_when(Directive *d, V w, int allow_arch)
         star_error("%s: when=\"%s\": target= constraints are only supported on patch()", d->kind, d->when->s);
 }
 
+/* when_matches VERS VERSION: VERS (comma separated, or NULL for any) lists VERSION */
+static int when_matches(const char *vers, const char *version)
+{
+    int n = strlen(version);
+    const char *p = vers;
+    if (!vers)
+        return 1;
+    while (*p) {
+        const char *e = strchr(p, ',');
+        int len = e ? (int)(e - p) : (int)strlen(p);
+        if (len == n && memcmp(p, version, n) == 0)
+            return 1;
+        if (!e)
+            break;
+        p = e + 1;
+    }
+    return 0;
+}
+
 static Str *opt_str(V v, const char *what)
 {
     if (!v || v == None)
@@ -151,17 +202,17 @@ static void no_space(Str *s, const char *what)
             star_error("%s: %s must not contain whitespace: \"%s\"", what, what, s->s);
 }
 
-static V d_package(Args *a)
+/* license("GPL-3.0-or-later", when=...), as in Spack (checked_by= is not kept) */
+static V d_license(Args *a)
 {
-    V desc = NULL, home = NULL, lic = NULL;
-    unpack_args(a, "description?", &desc, "homepage?", &home, "license?", &lic, NULL);
-    if (!loading)
-        star_error("package: directives may only be called while the recipe loads");
-    if (package_called++)
-        star_error("package: called more than once");
-    pkg_description = opt_str(desc, "package");
-    pkg_homepage = opt_str(home, "package");
-    pkg_license = opt_str(lic, "package");
+    V id, checked = NULL, when = NULL;
+    Directive *d;
+    unpack_args(a, "license_identifier", &id, "checked_by?", &checked, "when?", &when, NULL);
+    d = new_directive("license");
+    d->a = want_str(id, "license");
+    if (d->a->len == 0)
+        star_error("license: empty license identifier");
+    set_when(d, when, 0);
     return None;
 }
 
@@ -204,26 +255,64 @@ static V d_resource(Args *a)
     return None;
 }
 
+/* type= as in Spack: one of "build", "link", "run", "test", or a tuple or
+ * list of them; None means the default, ("build", "link"). */
+static int dep_types(V t)
+{
+    int bits = 0, i, j;
+    V l;
+    if (!t || t == None)
+        return DT_BUILD | DT_LINK;
+    if (TYPE(t) == T_STRING) {
+        V one = mk_list(1);
+        list_append(one, t);
+        t = one;
+    }
+    if (TYPE(t) != T_LIST && TYPE(t) != T_TUPLE)
+        star_error("depends_on: type= wants a string or a tuple of strings, got %s", type_name(t));
+    l = to_list(t);
+    if (AS_LIST(l)->len == 0)
+        star_error("depends_on: type= is empty");
+    for (i = 0; i < AS_LIST(l)->len; i++) {
+        Str *s = want_str(AS_LIST(l)->items[i], "depends_on");
+        for (j = 0; dt_names[j]; j++)
+            if (str_eq(s, dt_names[j]))
+                break;
+        if (!dt_names[j])
+            star_error("depends_on: type \"%s\": want build, link, run or test", s->s);
+        bits |= 1 << j;
+    }
+    return bits;
+}
+
+/* comma-joined names of the DT_* bits, in canonical order */
+static const char *dep_types_str(int bits)
+{
+    Buf b;
+    int j;
+    buf_init(&b);
+    for (j = 0; dt_names[j]; j++) {
+        if (!(bits & (1 << j)))
+            continue;
+        if (b.len)
+            buf_putc(&b, ',');
+        buf_puts(&b, dt_names[j]);
+    }
+    return buf_cstr(&b);
+}
+
 static V d_depends_on(Args *a)
 {
-    V when = NULL;
-    int i;
-    for (i = 0; i < a->nkw; i++) {
-        if (str_eq(a->kwnames[i], "when"))
-            when = a->kwvals[i];
-        else
-            star_error("depends_on: unexpected keyword argument %s", a->kwnames[i]->s);
-    }
-    if (a->npos == 0)
-        star_error("depends_on: at least one spec is required");
-    for (i = 0; i < a->npos; i++) {
-        Directive *d = new_directive("depends_on");
-        d->a = want_str(a->pos[i], "depends_on");
-        no_space(d->a, "spec");
-        if (d->a->len == 0 || d->a->s[0] == '@')
-            star_error("depends_on: invalid spec \"%s\"", d->a->s);
-        set_when(d, when, 0);
-    }
+    V spec, when = NULL, type = NULL;
+    Directive *d;
+    unpack_args(a, "spec", &spec, "when?", &when, "type?", &type, NULL);
+    d = new_directive("depends_on");
+    d->a = want_str(spec, "depends_on");
+    no_space(d->a, "spec");
+    if (d->a->len == 0 || d->a->s[0] == '@')
+        star_error("depends_on: invalid spec \"%s\"", d->a->s);
+    d->types = dep_types(type);
+    set_when(d, when, 0);
     return None;
 }
 
@@ -241,41 +330,114 @@ static V d_patch(Args *a)
     return None;
 }
 
+/* conditional("makefile", when="@=3.0.4"), as in Spack: build system values
+ * that apply only when the condition holds. A struct the directive unpacks. */
+static V d_conditional(Args *a)
+{
+    V when = NULL, vals;
+    Str *names[2];
+    V fv[2];
+    int i;
+    for (i = 0; i < a->nkw; i++) {
+        if (str_eq(a->kwnames[i], "when"))
+            when = a->kwvals[i];
+        else
+            star_error("conditional: unexpected keyword argument %s", a->kwnames[i]->s);
+    }
+    if (a->npos == 0)
+        star_error("conditional: at least one value is required");
+    if (!when || when == None)
+        star_error("conditional: when= is required");
+    vals = mk_list(a->npos);
+    for (i = 0; i < a->npos; i++)
+        list_append(vals, (V)want_str(a->pos[i], "conditional"));
+    names[0] = intern("values");
+    fv[0] = vals;
+    names[1] = intern("when");
+    fv[1] = (V)want_str(when, "conditional");
+    return mk_struct("conditional", 2, names, fv);
+}
+
+/* build_system("autotools") or, as in Spack,
+ * build_system(conditional("makefile", when="@=3.0.4"), "autotools", default="autotools").
+ * A node builds with the default if its condition holds, else with the first
+ * value whose condition holds. */
 static V d_build_system(Args *a)
 {
-    V name, when = NULL;
+    V def = NULL;
     Directive *d;
-    unpack_args(a, "name", &name, "when?", &when, NULL);
+    int i, j, n = 0;
+    for (i = 0; i < a->nkw; i++) {
+        if (str_eq(a->kwnames[i], "default"))
+            def = a->kwvals[i];
+        else
+            star_error("build_system: unexpected keyword argument %s", a->kwnames[i]->s);
+    }
+    if (a->npos == 0)
+        star_error("build_system: at least one value is required");
+    for (i = 0; i < ndirs; i++)
+        if (strcmp(dirs[i].kind, "build_system") == 0)
+            star_error("build_system: called more than once");
     d = new_directive("build_system");
-    d->a = want_str(name, "build_system");
-    no_space(d->a, "build_system");
-    set_when(d, when, 0);
+    d->values = arena_alloc(sizeof(Directive) * 16);
+    for (i = 0; i < a->npos; i++) {
+        V x = a->pos[i];
+        V vals = x;
+        Str *when = NULL;
+        if (TYPE(x) == T_STRUCT && strcmp(((Struct *)x)->ctor, "conditional") == 0) {
+            Struct *c = (Struct *)x;
+            for (j = 0; j < c->n; j++) {
+                if (str_eq(c->names[j], "values"))
+                    vals = c->vals[j];
+                else if (str_eq(c->names[j], "when"))
+                    when = AS_STR(c->vals[j]);
+            }
+        } else {
+            vals = mk_list(1);
+            list_append(vals, (V)want_str(x, "build_system"));
+        }
+        vals = to_list(vals);
+        for (j = 0; j < AS_LIST(vals)->len; j++) {
+            Directive *v;
+            if (n == 16)
+                star_error("build_system: too many values");
+            v = &d->values[n++];
+            memset(v, 0, sizeof *v);
+            v->kind = "build_system";
+            v->a = AS_STR(AS_LIST(vals)->items[j]);
+            no_space(v->a, "build_system");
+            if (when)
+                set_when(v, (V)when, 0);
+        }
+    }
+    d->nvalues = n;
+    d->a = def && def != None ? want_str(def, "build_system") : d->values[0].a;
+    for (i = 0; i < n; i++)
+        if (str_eq(d->values[i].a, d->a->s))
+            break;
+    if (i == n)
+        star_error("build_system: default \"%s\" is not among the values", d->a->s);
     return None;
 }
 
-static V d_parallel(Args *a)
+/* the build system of version VERSION: the default if its condition holds,
+ * else the first value whose condition holds; "generic" without the directive */
+static const char *pick_build_system(const char *version)
 {
-    V b;
-    Directive *d;
-    unpack_positional(a, 1, 1, &b);
-    if (TYPE(b) != T_BOOL)
-        star_error("parallel: got %s, want bool", type_name(b));
-    d = new_directive("parallel");
-    d->flag = truth(b);
-    return None;
-}
-
-static V d_build_directory(Args *a)
-{
-    V dir;
-    Directive *d;
-    unpack_positional(a, 1, 1, &dir);
-    d = new_directive("build_directory");
-    d->a = want_str(dir, "build_directory");
-    no_space(d->a, "build_directory");
-    if (d->a->len == 0 || d->a->s[0] == '/')
-        star_error("build_directory: want a relative path");
-    return None;
+    int i, j;
+    for (i = 0; i < ndirs; i++) {
+        Directive *d = &dirs[i];
+        if (strcmp(d->kind, "build_system") != 0)
+            continue;
+        for (j = 0; j < d->nvalues; j++)
+            if (str_eq(d->values[j].a, d->a->s) && when_matches(d->values[j].when_ver, version))
+                return d->a->s;
+        for (j = 0; j < d->nvalues; j++)
+            if (when_matches(d->values[j].when_ver, version))
+                return d->values[j].a->s;
+        star_error("%s@%s: no build_system value applies to this version", recipe_name, version);
+    }
+    return "generic";
 }
 
 /* ------------------------------------------------------------------ actions -- */
@@ -708,9 +870,9 @@ static V a_filter_file(Args *a)
 /* ---------------------------------------------------------------- predeclared -- */
 
 static const struct { const char *name; BuiltinFn fn; } host_fns[] = {
-    {"package", d_package}, {"version", d_version}, {"resource", d_resource},
-    {"depends_on", d_depends_on}, {"patch", d_patch}, {"build_system", d_build_system},
-    {"parallel", d_parallel}, {"build_directory", d_build_directory},
+    {"version", d_version}, {"resource", d_resource}, {"depends_on", d_depends_on},
+    {"patch", d_patch}, {"license", d_license}, {"build_system", d_build_system},
+    {"conditional", d_conditional},
     {"run", a_run}, {"sh", a_sh}, {"setenv", a_setenv}, {"prepend_path", a_prepend_path},
     {"unsetenv", a_unsetenv}, {"chdir", a_chdir}, {"mkdir", a_mkdir}, {"copy", a_copy},
     {"move", a_move}, {"remove", a_remove}, {"symlink", a_symlink}, {"hardlink", a_hardlink},
@@ -754,7 +916,60 @@ static char *root_path_hook(const char *name, const char *from_file)
 }
 
 static Module *recipe_module;
-static const char *recipe_name;
+
+/* The docstring, whitespace-normalized: words joined by single spaces. */
+static Str *docstring(Module *m)
+{
+    Node *f = m->file, *x;
+    Buf b;
+    int i, inword = 0;
+    if (!f || f->n == 0 || f->list[0]->kind != N_EXPRSTMT)
+        return NULL;
+    x = f->list[0]->a;
+    if (!x || x->kind != N_STRING)
+        return NULL;
+    buf_init(&b);
+    for (i = 0; i < x->s->len; i++) {
+        char c = x->s->s[i];
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            inword = 0;
+            continue;
+        }
+        if (!inword && b.len)
+            buf_putc(&b, ' ');
+        inword = 1;
+        buf_putc(&b, c);
+    }
+    return b.len ? AS_STR(mk_str(b.p, b.len)) : NULL;
+}
+
+static V recipe_global(const char *name);
+
+/* What Spack keeps as class attributes, a recipe sets as globals:
+ * homepage = "...", parallel = False, build_directory = "_build". */
+static void read_attributes(Module *m, const char *path)
+{
+    V v;
+    pkg_description = docstring(m);
+    if ((v = recipe_global("homepage")) != NULL) {
+        if (TYPE(v) != T_STRING)
+            star_error("%s: homepage must be a string, got %s", path, type_name(v));
+        pkg_homepage = AS_STR(v);
+    }
+    if ((v = recipe_global("parallel")) != NULL) {
+        if (TYPE(v) != T_BOOL)
+            star_error("%s: parallel must be a bool, got %s", path, type_name(v));
+        pkg_parallel = truth(v);
+    }
+    if ((v = recipe_global("build_directory")) != NULL) {
+        if (TYPE(v) != T_STRING)
+            star_error("%s: build_directory must be a string, got %s", path, type_name(v));
+        pkg_build_directory = AS_STR(v);
+        no_space(pkg_build_directory, "build_directory");
+        if (pkg_build_directory->len == 0 || pkg_build_directory->s[0] == '/')
+            star_error("%s: build_directory must be a relative path", path);
+    }
+}
 
 static void load_recipe(const char *name)
 {
@@ -770,8 +985,7 @@ static void load_recipe(const char *name)
     m = load_module(path.p, NULL);
     loading = 0;
     recipe_module = m;
-    if (!package_called)
-        star_error("%s: package() was not called", path.p);
+    read_attributes(m, path.p);
 }
 
 /* Load each build system the recipe names, so that it is validated here and
@@ -780,10 +994,13 @@ static void load_build_systems(void)
 {
     int i;
     for (i = 0; i < ndirs; i++) {
-        if (strcmp(dirs[i].kind, "build_system") == 0) {
+        int j;
+        if (strcmp(dirs[i].kind, "build_system") != 0)
+            continue;
+        for (j = 0; j < dirs[i].nvalues; j++) {
             Buf b;
             buf_init(&b);
-            buf_printf(&b, "//build_systems/%s.star", dirs[i].a->s);
+            buf_printf(&b, "//build_systems/%s.star", dirs[i].values[j].a->s);
             load_module(root_path_hook(buf_cstr(&b), opt_root), NULL);
         }
     }
@@ -879,26 +1096,30 @@ static void emit_shpack(void)
         fprintf(f, "%s\n", pkg_homepage->s);
         close_out(f);
     }
-    if (pkg_license) {
-        f = open_out("license");
-        if (!opt_out) fputs("## license\n", f);
-        fprintf(f, "%s\n", pkg_license->s);
+    if (!pkg_parallel) {
+        f = open_out("parallel");
+        if (!opt_out) fputs("## parallel\n", f);
+        fputs("false\n", f);
         close_out(f);
     }
+    if (pkg_build_directory) {
+        f = open_out("build_directory");
+        if (!opt_out) fputs("## build_directory\n", f);
+        fprintf(f, "%s\n", pkg_build_directory->s);
+        close_out(f);
+    }
+    LINES("license", strcmp(d->kind, "license") == 0, "%s %s\n",
+          d->when_ver ? d->when_ver : "-", d->a->s);
     LINES("versions", strcmp(d->kind, "version") == 0, "%s %s %s %s\n",
           d->a->s, dash(d->sha256), default_fname(d), dash(d->url));
     LINES("resources", strcmp(d->kind, "resource") == 0, "%s %s %s %s\n",
           d->when_ver ? d->when_ver : "-", d->sha256->s, default_fname(d), dash(d->url));
-    LINES("deps", strcmp(d->kind, "depends_on") == 0, "%s %s\n",
-          d->when_ver ? d->when_ver : "-", d->a->s);
+    LINES("deps", strcmp(d->kind, "depends_on") == 0, "%s %s %s\n",
+          d->when_ver ? d->when_ver : "-", dep_types_str(d->types), d->a->s);
     LINES("patches", strcmp(d->kind, "patch") == 0, "%s level=%lld%s%s%s%s\n",
           d->a->s, (long long)d->level,
           d->when_ver ? " when=" : "", d->when_ver ? d->when_ver : "",
           d->when_arch ? " arch=" : "", d->when_arch ? d->when_arch : "");
-    LINES("build_system", strcmp(d->kind, "build_system") == 0, "%s %s\n",
-          d->when_ver ? d->when_ver : "-", d->a->s);
-    LINES("parallel", strcmp(d->kind, "parallel") == 0, "%s\n", d->flag ? "true" : "false");
-    LINES("build_directory", strcmp(d->kind, "build_directory") == 0, "%s\n", d->a->s);
 #undef LINES
     buf_init(&b);
     loads_list(&b, 0);
@@ -1001,13 +1222,11 @@ static void emit_json(void)
     buf_init(&b);
     buf_puts(&b, "{\"name\": ");
     json_str(&b, recipe_name, strlen(recipe_name));
-    buf_puts(&b, ", \"package\": {\"description\": ");
-    if (pkg_description) json_str(&b, pkg_description->s, pkg_description->len); else buf_puts(&b, "null");
-    buf_puts(&b, ", \"homepage\": ");
-    if (pkg_homepage) json_str(&b, pkg_homepage->s, pkg_homepage->len); else buf_puts(&b, "null");
-    buf_puts(&b, ", \"license\": ");
-    if (pkg_license) json_str(&b, pkg_license->s, pkg_license->len); else buf_puts(&b, "null");
-    buf_puts(&b, "},\n \"directives\": [");
+    json_opt(&b, "description", pkg_description);
+    json_opt(&b, "homepage", pkg_homepage);
+    buf_printf(&b, ", \"parallel\": %s", pkg_parallel ? "true" : "false");
+    json_opt(&b, "build_directory", pkg_build_directory);
+    buf_puts(&b, ",\n \"directives\": [");
     for (i = 0; i < ndirs; i++) {
         Directive *d = &dirs[i];
         buf_puts(&b, i ? ",\n   " : "\n   ");
@@ -1027,19 +1246,35 @@ static void emit_json(void)
             buf_puts(&b, ", \"fname\": ");
             json_str(&b, default_fname(d), strlen(default_fname(d)));
         } else if (strcmp(d->kind, "depends_on") == 0) {
+            int j, first = 1;
             json_opt(&b, "spec", d->a);
+            buf_puts(&b, ", \"type\": [");
+            for (j = 0; dt_names[j]; j++) {
+                if (!(d->types & (1 << j)))
+                    continue;
+                buf_printf(&b, first ? "\"%s\"" : ", \"%s\"", dt_names[j]);
+                first = 0;
+            }
+            buf_putc(&b, ']');
+        } else if (strcmp(d->kind, "license") == 0) {
+            json_opt(&b, "license", d->a);
         } else if (strcmp(d->kind, "patch") == 0) {
             json_opt(&b, "file", d->a);
             buf_printf(&b, ", \"level\": %lld", (long long)d->level);
         } else if (strcmp(d->kind, "build_system") == 0) {
-            json_opt(&b, "name", d->a);
-        } else if (strcmp(d->kind, "parallel") == 0) {
-            buf_printf(&b, ", \"value\": %s", d->flag ? "true" : "false");
-        } else if (strcmp(d->kind, "build_directory") == 0) {
-            json_opt(&b, "path", d->a);
+            int j;
+            buf_puts(&b, ", \"values\": [");
+            for (j = 0; j < d->nvalues; j++) {
+                buf_puts(&b, j ? ", {\"name\": " : "{\"name\": ");
+                json_str(&b, d->values[j].a->s, d->values[j].a->len);
+                json_opt(&b, "when", d->values[j].when);
+                buf_putc(&b, '}');
+            }
+            buf_putc(&b, ']');
+            json_opt(&b, "default", d->a);
         }
         if (strcmp(d->kind, "resource") == 0 || strcmp(d->kind, "depends_on") == 0 ||
-            strcmp(d->kind, "patch") == 0 || strcmp(d->kind, "build_system") == 0)
+            strcmp(d->kind, "patch") == 0 || strcmp(d->kind, "license") == 0)
             json_opt(&b, "when", d->when);
         buf_putc(&b, '}');
     }
@@ -1090,7 +1325,7 @@ static V c_satisfies(Args *a)
     s = want_str(spec, "satisfies");
     if (parse_when(s, &ver, &arch, &err) < 0)
         star_error("satisfies: \"%s\": %s", s->s, err);
-    if (ver && strcmp(ver, ctx_version) != 0)
+    if (ver && !when_matches(ver, ctx_version))
         return False;
     if (arch && strcmp(arch, ctx_arch) != 0)
         return False;
@@ -1122,11 +1357,7 @@ static V make_ctx(void)
     names[n] = intern("satisfies");
     vals[n++] = mk_builtin("satisfies", c_satisfies, NULL);
     names[n] = intern("build_directory");
-    vals[n] = None;
-    for (i = 0; i < ndirs; i++)
-        if (strcmp(dirs[i].kind, "build_directory") == 0)
-            vals[n] = (V)dirs[i].a;
-    n++;
+    vals[n++] = pkg_build_directory ? (V)pkg_build_directory : None;
     {
         Module *m = recipe_module;
         Str **pn = arena_alloc(sizeof(Str *) * (m->nglobals + 1));
@@ -1186,19 +1417,11 @@ static int plan(Phase **out)
 {
     V ctx, phases, fn;
     Module *bs;
-    const char *bsname = "generic";
+    const char *bsname = pick_build_system(want_str(ctx_get("version", 1), "ctx")->s);
     Phase *ph;
     int i, n = 0;
     Buf b;
 
-    for (i = 0; i < ndirs; i++) {
-        Directive *d = &dirs[i];
-        if (strcmp(d->kind, "build_system") == 0 &&
-            (!d->when_ver || strcmp(d->when_ver, want_str(ctx_get("version", 1), "ctx")->s) == 0)) {
-            bsname = d->a->s;
-            break;
-        }
-    }
     buf_init(&b);
     buf_printf(&b, "//build_systems/%s.star", bsname);
     bs = load_module(root_path_hook(buf_cstr(&b), opt_root), NULL);

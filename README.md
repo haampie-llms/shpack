@@ -84,44 +84,46 @@ time -- store and state are shared on disk.
 ```
 ...
 ==> shpack install gcc
-9b36374    gcc@16.1.0
-0c181f8      gcc-boot-wrapper@16.1.0
-b31ec8a        gcc-boot2@16.1.0
-32616aa          gmake@4.4.1
-055307c            tcc@0.9.27 (external)
-9d99eb9            musl@1.1.24 (external)
-88cd1c4            grep@2.4-musl
-219a904              dash@0.5.12 (external)
-fcd4bd2            gawk@3.0.4
-dce3138          diffutils@2.7
-3434227          findutils@4.2.33
-462641a          gcc-boot1@9.5.0
-7fc0b11            gcc-boot0@4.7-2013.11
-a8a47ca              binutils-boot0@2.30-musl
-5117405                m4@1.4.7
-ac8cf40              gmp@4.3.2
-ef7b22d              mpfr@2.4.2
-a6af7a0              mpc@1.0.3
-46d3c62            musl@1.2.5
-7110442              linux-headers@6.9.1
-036bf59                sed@4.9-musl
-913a973                  xz@5.2.5-musl
-5b0eeaf            tar@1.35-musl
-2086ec2          binutils-boot1@2.46.0-musl
-b4dcb20            gawk@5.3.1
-7b6eca3        glibc@2.43
-5b772cd          python@3.8.20
-7049e44          bison@3.8.2
-dc9d939          dash@0.5.13.4
-f677d58            glibc@2.43-boot
-2ff07b9            dash-boot@0.5.12 (external)
-318325c      binutils@2.46.0
-7f84d6d        libstdcxx-boot1@16.1.0
-6f31ed5        zlib-ng@2.3.3-boot
-512bb73        zstd@1.5.7-boot
+79f8d53  [    ]  gcc@16.1.0
+a5f6526  [b   ]    gcc-boot-wrapper@16.1.0
+e184f01  [b r ]      gcc-boot2@16.1.0
+03a0cc9  [b   ]        gmake@4.4.1
+055307c  [b   ]          tcc@0.9.27 (external)
+9d99eb9  [bl  ]          musl@1.1.24 (external)
+36ad4e2  [b   ]          grep-boot@2.4
+219a904  [b   ]            dash@0.5.12 (external)
+6e1805c  [b   ]          gawk-boot@3.0.4
+f07ea20  [b   ]        diffutils@2.7
+a4127e6  [b   ]        findutils@4.2.33
+e324b73  [b   ]        gcc-boot1@9.5.0
+e11989f  [b   ]          gcc-boot0@4.7-2013.11
+99b6c72  [b r ]            binutils-boot0@2.30-musl
+bd87377  [b   ]              m4@1.4.7
+4af249a  [bl  ]            gmp@4.3.2
+3b5239f  [bl  ]            mpfr@2.4.2
+4c5138a  [bl  ]            mpc@1.0.3
+fddb1ab  [bl  ]          musl@1.2.5
+baf95b6  [bl  ]            linux-headers@6.9.1
+83b3d43  [b   ]              sed@4.9-musl
+5b66865  [b   ]                xz@5.2.5-musl
+eccf036  [b   ]          tar@1.35-musl
+1376e69  [b r ]        binutils-boot1@2.46.0-musl
+5b92169  [b   ]          gawk@5.3.1
+5446314  [bl  ]      glibc@2.43
+1801aa7  [b   ]        python@3.8.20
+a0ef9b1  [b   ]        bison@3.8.2
+8d986a5  [b   ]        dash@0.5.13.4
+9a4f414  [bl  ]          glibc@2.43-boot
+2ff07b9  [b   ]          dash-boot@0.5.12 (external)
+b767a7f  [b r ]    binutils@2.46.0
+256eb0c  [bl  ]      libstdcxx-boot1@16.1.0
+bf09790  [bl  ]      zlib-ng@2.3.3-boot
+397bcaf  [bl  ]      zstd@1.5.7-boot
 ```
 
-The `(external)` nodes are part of the initial bootstrapping phase. All installed
+The column in brackets is the type of the dependency edge, as `spack spec -t`
+prints it: `b`uild, `l`ink, `r`un. The `(external)` nodes are part of the
+initial bootstrapping phase. All installed
 packages are put into unique prefixes `$STORE/<name>-<version>[-<hash>]`.
 
 ### `shpack install spack`
@@ -173,22 +175,32 @@ declare versions (with source checksums), dependencies, patches and a build
 system, and phase functions return the actions that build the package:
 
 ```python
-load("//build_systems/lib.star", "triple")
+"""GNU binary utilities."""
 
-package(description = "GNU binary utilities", license = "GPL-3.0-or-later")
+license("GPL-3.0-or-later")
 version("2.30", sha256 = "8c38...", url = "https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.gz")
 build_system("autotools")
-depends_on("tcc", "musl", "gmake@4.4.1", "dash@0.5.12")
+depends_on("tcc", type = "build")
+depends_on("musl")
+depends_on("gmake@4.4.1", type = "build")
+depends_on("dash@0.5.12", type = "build")
 patch("arm64-elfnn-howto.patch", when = "target=aarch64:")
 
 def configure_args(ctx):
     return ["--with-sysroot=" + ctx.dep("musl").prefix, "--disable-nls"]
 ```
 
+The directives are Spack's, with Spack's signatures; the docstring is the
+description, and `homepage`, `parallel = False` and `build_directory` are
+globals where a Spack package has class attributes. Dependency types are
+Spack's too, `("build", "link")` by default: a build's PATH holds its `build`
+dependencies and what they `run`, not the whole closure, and only `link`
+dependencies reach the compiler wrapper's `-I`/`-L`/rpath.
+
 `version` is repeatable (the first one declared is the default), and `when=`
-ties a dependency, patch, resource or build system to one declared version,
-in Spack's spec syntax, so one recipe can carry several versions with
-different pinned deps:
+ties a dependency, patch, resource or build system to declared versions
+(`@=V`, or `@=V1,=V2`), in Spack's spec syntax, so one recipe can carry
+several versions with different pinned deps:
 
 ```python
 version("4.7-2013.11", sha256 = "...", url = "...")
@@ -238,7 +250,7 @@ a recipe declares wins; `name@version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
 DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
 auxiliary files, the build-system modules it loads, the evaluator version,
-source checksums, target arch, and the hashes of all direct dependencies. Anything changing anywhere in a package's closure changes its
+source checksums, target arch, and the hashes and types of all direct dependencies. Anything changing anywhere in a package's closure changes its
 hash.
 
 Every package installs into its own prefix `$STORE/<name>-<version>-<hash7>`,
@@ -253,7 +265,8 @@ contribute their identity to dependents' hashes.
 
 Concretization emits `dag.mk` (one stamp target per node, direct deps as
 prerequisites) and GNU make runs the DAG in parallel. Each build is its own
-process with a precomposed PATH: own prefix, then the dependency closure
+process with a precomposed PATH: own prefix, then its build dependencies and
+what they run (Spack's rule, see [PROTOCOL.md](star/PROTOCOL.md)),
 most-derived-first, then `BASEPATH` (the kaem-phase base layer plus stage0 seed
 dirs). No runtime PATH composition, exactly one provider per tool. Logs are
 per-package; a failure prints the log tail and stops. When the DAG contains

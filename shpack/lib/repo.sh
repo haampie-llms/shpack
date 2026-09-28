@@ -13,16 +13,17 @@
 #
 #   versions         VER SHA FNAME URL      (first declared = default)
 #   resources        WHEN SHA FNAME URL
-#   deps             WHEN SPEC
-#   patches          FILE level=N [when=VER] [arch=ARCH]
-#   build_system     WHEN NAME
-#   parallel         false
-#   build_directory  DIR
-#   description, homepage, license
+#   deps             WHEN TYPES SPEC        (TYPES: build,link,run,test subset)
+#   patches          FILE level=N [when=VERS] [arch=ARCH]
+#   license          WHEN ID
+#   parallel         false                  (the recipe's `parallel = False`)
+#   build_directory  DIR                    (its `build_directory = "..."`)
+#   description      the docstring;  homepage  its `homepage = "..."`
 #   loads            the //-modules the recipe loads, relative to the root
 #
-# '-' marks an absent field; WHEN is an exact version or '-' for all versions.
-# The phases are evaluated at build time by `star plan` (builder.sh).
+# '-' marks an absent field; WHEN is the versions of a when="@=V1,=V2", comma
+# separated, or '-' for all versions (when_matches in spec.sh). The build
+# system and the phases are evaluated at build time by `star plan` (builder.sh).
 
 # recipe_load NAME -- capture NAME's directives into $VAR/recipe/NAME.
 recipe_load() {
@@ -57,7 +58,7 @@ spec_sources() {
     fi
     if [ -f "$rs/resources" ]; then
         while read -r when sha fname url; do
-            if [ "$when" = - ] || [ "$when" = "$2" ]; then
+            if when_matches "$when" "$2"; then
                 printf '%s %s %s\n' "$sha" "$fname" "$url"
             fi
         done < "$rs/resources"

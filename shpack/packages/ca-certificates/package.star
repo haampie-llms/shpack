@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "Mozilla CA certificate bundle (PEM), as published by the curl "
-                  + "project. Installed as etc/ssl/cert.pem for TLS clients that want a "
-                  + "trust store on disk. No compiled code -- just the .pem.",
-    homepage = "https://curl.se/docs/caextract.html",
-    license = "MPL-2.0",
-)
+"""Mozilla CA certificate bundle (PEM), as published by the curl project.
+Installed as etc/ssl/cert.pem for TLS clients that want a trust store on disk.
+No compiled code -- just the .pem."""
+
+homepage = "https://curl.se/docs/caextract.html"
+license("MPL-2.0")
 
 # A bare .pem, not an archive: builder.sh unpack() cp's it into the stage dir.
 # The version is the bundle's release date.
@@ -19,7 +18,7 @@ version(
 build_system("generic")
 
 # No build step needs it, but every node declares its build shell (builder.sh).
-depends_on("dash")
+depends_on("dash", type = "build")
 
 def install(ctx):
     return [

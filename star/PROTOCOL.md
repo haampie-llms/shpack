@@ -21,24 +21,47 @@ happens later, when the host executes the actions.
 
 A recipe is a Starlark module. The host predeclares the directives and the
 action constructors below; `load()` paths starting with `//` resolve against
-`root`, the directory that holds `build_systems/`.
+`root`, the directory that holds `build_systems/`. The directives are a subset
+of Spack's, with Spack's signatures, and what Spack keeps in class attributes
+a recipe keeps in globals and its docstring:
+
+```python
+"""GNU make: the parallel-safe make of the bootstrap."""
+
+homepage = "https://www.gnu.org/software/make/"
+license("GPL-3.0-or-later")
+
+version("4.4.1", sha256 = "dd16...", url = "https://.../make-4.4.1.tar.gz")
+build_system("autotools")
+depends_on("tcc", type = "build")
+depends_on("musl@1.1.24")
+parallel = False
+```
 
 ### Directives (callable only while the recipe loads)
 
 | directive | meaning |
 |---|---|
-| `package(description=, homepage=, license=)` | metadata; exactly once |
 | `version(ver, sha256=, url=, fname=)` | a buildable version and its source. The first declared version is the default for a bare name. `fname` defaults to the URL's basename. A version without `sha256` has no source. |
 | `resource(url=, sha256=, fname=, when=)` | an extra distfile, unpacked into the stage beside the main source |
-| `depends_on(spec, ..., when=)` | build dependencies, `name` or `name@version` (exact) |
+| `depends_on(spec, when=, type=)` | one dependency, `name` or `name@version` (exact). `type` is Spack's: `"build"`, `"link"`, `"run"`, `"test"` or a tuple of them; the default is `("build", "link")`. |
 | `patch(file, level=1, when=)` | apply `patches/<file>` with `-p<level>` |
-| `build_system(name, when=)` | `generic`, `makefile` or `autotools`; the first matching call wins |
-| `parallel(bool)` | `parallel(False)`: build with `-j1` |
-| `build_directory(path)` | configure/build out of tree, in this subdirectory of the source |
+| `license(id, checked_by=, when=)` | an SPDX license identifier (`checked_by` is not kept) |
+| `build_system(*values, default=)` | `generic`, `makefile` or `autotools`, at most once. A value is a name or `conditional(name, ..., when=)`. A node builds with `default` (the first value unless given) if its condition holds, else with the first value whose condition does. Without the directive: `generic`. |
 
-`when=` takes a subset of Spack's spec syntax: space-separated `@=VERSION`
-(exactly this version of the package) and `target=x86_64:` / `target=aarch64:`
-(the target family; `patch()` only). Anything else is an error.
+`when=` takes a subset of Spack's spec syntax, space separated: `@=VERSION`
+(exactly this version of the package), `@=V1,=V2,...` (any of these), and
+`target=x86_64:` / `target=aarch64:` (the target family; `patch()` only).
+Anything else is an error.
+
+### Attributes
+
+| global | meaning |
+|---|---|
+| docstring | the description: the module's first statement, if it is a string; whitespace runs become single spaces |
+| `homepage` | a string |
+| `parallel` | `False`: build with `-j1` |
+| `build_directory` | configure/build out of tree, in this relative subdirectory of the source |
 
 ### Phases
 
@@ -69,11 +92,11 @@ argument hooks (`configure_args(ctx)`, `build_args`, `build_targets`,
 | `sh` | the build shell (the recipe's `dash` dependency) |
 | `stage_dir`, `source_dir` | where sources are unpacked; the first directory there |
 | `package_dir`, `package_files` | the recipe's directory and the files in it (relative) |
-| `jobs`, `makejobs` | the job count; `[]`, or `["-j1"]` for `parallel(False)` |
+| `jobs`, `makejobs` | the job count; `[]`, or `["-j1"]` for `parallel = False` |
 | `file_prefix_map`, `debug_prefix_map` | `-ffile-prefix-map=<stage>=.`, `-fdebug-prefix-map=<stage>=.` |
 | `build_directory` | the directive's value, or `None` |
 | `pkg` | a struct of the recipe's exported globals |
-| `dep(name)` | `.prefix` of `name` among the direct dependencies, then the closure |
+| `dep(name)` | `.prefix` of `name` among the direct dependencies, then the closure (any type) |
 | `satisfies(when)` | the `when=` grammar, against this node |
 
 The shpack builder writes it as a Starlark file, `ctx = {...}`, with the
@@ -122,17 +145,25 @@ reproduces:
   `patch -p<level>` from the build PATH, and `#!` interpreters in the whole
   stage are rewritten to `ctx.sh`.
 - **Environment.** Nothing is inherited from the invoking process:
-  - `PATH` is the prefix's own `bin`, then the `bin` of every dependency in
-    the reverse of a DFS post-order over the declared dependencies, then the
-    host's base PATH.
+  - `PATH` is the prefix's own `bin`, then the `bin` of the dependencies
+    that Spack makes runnable in a build (`effective_deptypes`), then the
+    host's base PATH. Those are the direct `build` (or `test`) dependencies,
+    and what each of them runs: its `run` dependencies, found through `run`
+    and `link` edges. They are not the node's own `run`-only dependencies,
+    its `link`-only ones, or the build dependencies of its dependencies. They
+    appear in the reverse of a DFS post-order over the declared dependencies
+    (all types).
   - `SOURCE_DATE_EPOCH=0`; `SHELL`, `sh` and `MAKEFLAGS` carry `ctx.sh`;
     `HOME` and `TMPDIR` are build scratch.
-  - Also set: `PREFIX`, `ARCH`, `JOBS`, `makejobs`, the compiler-wrapper
-    variables, and `PKG_CONFIG_PATH`.
+  - Also set: `PREFIX`, `ARCH`, `JOBS`, `makejobs`, and, from the direct
+    `link` dependencies, the compiler-wrapper variables and
+    `PKG_CONFIG_PATH`.
 - **Finalization.** `lib/*.la` and `lib64/*.la` are removed. Modes are
   normalized: directories 755, files 644, or 755 if any execute bit is set.
 - **Order.** `ctx.deps` is the direct dependencies, then the closure sorted
   by `name-version`, first match winning.
+- **Build order.** Every dependency, whatever its type, is installed before
+  its dependents.
 
 ## Canonical forms
 

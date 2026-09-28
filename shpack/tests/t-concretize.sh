@@ -4,9 +4,7 @@
 . "$(dirname "$0")/common.sh"
 
 mkstar liba <<'EOF'
-package(
-    description = "toy leaf library",
-)
+"""toy leaf library"""
 version("1.0")
 build_system("generic")
 def install(ctx):
@@ -14,9 +12,7 @@ def install(ctx):
 EOF
 
 mkstar libb <<'EOF'
-package(
-    description = "toy mid-layer, two versions",
-)
+"""toy mid-layer, two versions"""
 version("2.1")
 version("2.0")
 build_system("generic")
@@ -26,12 +22,12 @@ def install(ctx):
 EOF
 
 mkstar tool <<'EOF'
-package(
-    description = "toy root",
-)
+"""toy root"""
 version("0.5")
 build_system("generic")
-depends_on("libb@2.1", "liba", "ext")
+depends_on("libb@2.1")
+depends_on("liba")
+depends_on("ext")
 def install(ctx):
     return []
 EOF
@@ -78,7 +74,6 @@ if shpack concretize nosuchpkg 2> /dev/null; then
 fi
 
 mkstar broken <<'EOF'
-package()
 version("1.0")
 depends_on("missingdep")
 EOF
@@ -89,21 +84,18 @@ fi
 # Conditional (when=VER) dependencies: one recipe, two versions, dep sets
 # differing by version, plus an unconditional dep shared by both.
 mkstar dep-old <<'EOF'
-package()
 version("1.0")
 build_system("generic")
 def install(ctx):
     return []
 EOF
 mkstar dep-new <<'EOF'
-package()
 version("2.0")
 build_system("generic")
 def install(ctx):
     return []
 EOF
 mkstar multi <<'EOF'
-package()
 version("4.7")
 version("8.5")
 build_system("generic")
@@ -129,5 +121,83 @@ index_field liba 2 > /dev/null    || fail "multi@8.5 must keep unconditional lib
 if index_field dep-old 2 > /dev/null; then
     fail "multi@8.5 must not pull dep-old (when=4.7)"
 fi
+
+# when= takes a list of exact versions, as Spack's @=A,=B does.
+mkstar multi2 <<'EOF'
+version("4.7")
+version("8.5")
+version("9.0")
+build_system("generic")
+depends_on("dep-new", when = "@=8.5,=9.0")
+def install(ctx):
+    return []
+EOF
+shpack concretize multi2@9.0 > /dev/null
+index_field dep-new 2 > /dev/null || fail "multi2@9.0 must depend on dep-new (@=8.5,=9.0)"
+shpack concretize multi2@4.7 > /dev/null
+if index_field dep-new 2 > /dev/null; then
+    fail "multi2@4.7 must not pull dep-new (@=8.5,=9.0)"
+fi
+
+# Dependency types, as in Spack. A build's PATH has its build deps and what
+# they run: their run deps, also through link deps. Not its link-only deps,
+# and not the build deps of its deps.
+for p in rt rt2 bh lk lk2; do
+    mkstar $p <<EOF
+version("1.0")
+build_system("generic")
+$(case $p in lk) echo 'depends_on("rt2", type = "run")' ;; esac)
+def install(ctx):
+    return []
+EOF
+done
+mkstar tl <<'EOF'
+version("1.0")
+build_system("generic")
+depends_on("rt", type = "run")
+depends_on("bh", type = "build")
+depends_on("lk")
+def install(ctx):
+    return []
+EOF
+mkstar top <<'EOF'
+version("1.0")
+build_system("generic")
+depends_on("tl", type = "build")
+depends_on("lk2", type = ("link",))
+def install(ctx):
+    return []
+EOF
+shpack concretize top > /dev/null
+sh "$TESTROOT/bin/shpack" env top > "$TESTDIR/env.top"
+for p in tl rt rt2; do
+    assert_contains "$TESTDIR/env.top" "/$p-1.0-$(index_field $p 3)/bin:"
+done
+for p in bh lk lk2; do
+    if grep -q "/$p-1.0-" "$TESTDIR/env.top"; then
+        fail "$p must not be on top's PATH"
+    fi
+done
+# ... while tl's own build sees its build dep, not its run-only dep (as in
+# Spack: run deps are for its dependents).
+sh "$TESTROOT/bin/shpack" env tl > "$TESTDIR/env.tl"
+assert_contains "$TESTDIR/env.tl" "/bh-1.0-"
+if grep -q "/rt-1.0-" "$TESTDIR/env.tl"; then
+    fail "rt (run only) must not be on tl's own build PATH"
+fi
+# Everything is still built first, and the types are part of the hash.
+assert_contains "$SHPACK_VAR/dag.mk" "build-one lk2-1.0"
+assert_contains "$SHPACK_VAR/spec/top-1.0/manifest" "dep tl 1.0 $(index_field tl 3) build"
+assert_contains "$SHPACK_VAR/spec/top-1.0/manifest" "dep lk2 1.0 $(index_field lk2 3) link"
+h=$(index_field top 3)
+sed 's/type = ("link",)/type = ("build", "link")/' "$SHPACK_REPO/top/package.star" > "$TESTDIR/top.star"
+cp "$TESTDIR/top.star" "$SHPACK_REPO/top/package.star"
+shpack concretize top > /dev/null
+[ "$(index_field top 3)" != "$h" ] || fail "a dependency's type must be in the hash"
+# `shpack spec` shows each edge's types the way `spack spec -t` does.
+shpack spec top > "$TESTDIR/spec.top"
+assert_contains "$TESTDIR/spec.top" "[b   ]    tl@1.0"
+assert_contains "$TESTDIR/spec.top" "[  r ]      rt@1.0"
+assert_contains "$TESTDIR/spec.top" "[bl  ]    lk2@1.0"
 
 echo OK

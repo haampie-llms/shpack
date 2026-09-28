@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+"""musl libc 1.2.5 -- modern, pristine static libc, rebuilt by the chain's real
+GCC 4.7 (sysroot for the gcc 9.5 bridge)"""
+
 load("//build_systems/lib.star", "replace_bin_sh", "triple")
 
-package(
-    description = "musl libc 1.2.5 -- modern, pristine static libc, rebuilt by the "
-                  + "chain's real GCC 4.7 (sysroot for the gcc 9.5 bridge)",
-    homepage = "https://musl.libc.org/",
-    license = "MIT",
-)
+homepage = "https://musl.libc.org/"
+license("MIT")
 
 # 1.1.24 stays the kaem-phase external (tcc-built); this recipe adds the modern
 # 1.2.5, built cleanly by gcc 4.7.
@@ -19,8 +18,16 @@ version(
 
 build_system("generic")
 
-depends_on("gcc-boot0", "binutils-boot0", "gmake", "linux-headers")
-depends_on("dash@0.5.12")
+depends_on("gcc-boot0", type = "build")
+depends_on("binutils-boot0", type = "build")
+depends_on("gmake", type = "build")
+depends_on("linux-headers")
+depends_on("grep-boot", type = "build")
+depends_on("gawk-boot", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("dash@0.5.12", type = "build")
 
 def setup_build_environment(ctx):
     # musl builds -nostdinc but still needs the kernel uapi (asm/ syscall and

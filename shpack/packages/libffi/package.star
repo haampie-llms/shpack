@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+"""libffi 3.4.6 -- foreign function interface. Provides CPython's _ctypes,
+which Spack imports at startup (archspec CPU detection via ctypes), so it's
+required even though clingo uses the C-API."""
+
 load("//build_systems/lib.star", "triple")
 
-package(
-    description = "libffi 3.4.6 -- foreign function interface. Provides CPython's "
-                  + "_ctypes, which Spack imports at startup (archspec CPU detection "
-                  + "via ctypes), so it's required even though clingo uses the C-API.",
-    homepage = "https://sourceware.org/libffi/",
-    license = "MIT",
-)
+homepage = "https://sourceware.org/libffi/"
+license("MIT")
 
 version(
     "3.4.6",
@@ -18,8 +17,16 @@ version(
 
 build_system("autotools")
 
-depends_on("compiler-wrapper", "gmake")
-depends_on("dash")
+depends_on("compiler-wrapper", type = "build")
+depends_on("gmake", type = "build")
+depends_on("sed@4.9-musl", type = "build")
+depends_on("grep-boot", type = "build")
+depends_on("gawk@5.3.1", type = "build")
+depends_on("diffutils", type = "build")
+depends_on("findutils", type = "build")
+depends_on("tar@1.35-musl", type = "build")
+depends_on("xz@5.2.5-musl", type = "build")
+depends_on("dash", type = "build")
 
 def configure_args(ctx):
     # Explicit triple (no date/uname for config.guess). --disable-multi-os-directory

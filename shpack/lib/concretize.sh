@@ -7,8 +7,14 @@
 #   spec/<id>/        one dir per node, id = name-version
 #     name, version, kind (built|external), hash, prefix
 #     deps              direct dep ids, recipe order
+#     edges             "ID TYPES" per direct dep, TYPES as in Spack (build,link,...)
 #     closure           transitive dep ids, sorted
 #     order             the closure in DFS post-order over declared deps
+#     exec              what a dependent may run through this node: its run
+#                       deps, and theirs and its link deps' (Spack's
+#                       RUNTIME_EXECUTABLE); for a dependent's PATH
+#     path              whose bin/ this node's build puts on PATH: every build
+#                       dep, plus its exec
 #     manifest          the canonical hash input (kept for auditability)
 #   topo              all ids, dependencies before dependents
 #   roots             ids of the requested packages
@@ -73,7 +79,7 @@ resolve() {
 # everything below it. Appends to $VAR/topo in dependency order. Sets
 # VISIT_ID to the resolved id.
 visit() {
-    local id sdir name version kind prefix dep depid hash f c
+    local id sdir name version kind prefix dep depid hash f c when types
     resolve "$1"
     id=$RES_ID name=$RES_NAME version=$RES_VERSION
     kind=$RES_KIND prefix=$RES_PREFIX
@@ -90,8 +96,11 @@ visit() {
     printf '%s\n' "$version" > "$sdir/version"
     printf '%s\n' "$kind"    > "$sdir/kind"
     : > "$sdir/deps"
+    : > "$sdir/edges"
     : > "$sdir/closure"
     : > "$sdir/order"
+    : > "$sdir/exec"
+    : > "$sdir/path"
 
     if [ "$kind" = external ]; then
         # Externals contribute their identity to dependents' hashes but have
@@ -104,16 +113,16 @@ visit() {
             > "$sdir/manifest"
     else
         # Children first: their hashes feed this node's manifest. A dep with
-        # a when=VER (recorded as the first field) is taken only for the
-        # matching version of this node; '-' means all versions.
+        # a when= (the first field: versions, comma separated) is taken only
+        # for a matching version of this node; '-' means all versions.
         if [ -f "$VAR/recipe/$name/deps" ]; then
-            while read -r when dep; do
-                if [ "$when" != - ] && [ "$when" != "$version" ]; then
-                    continue
-                fi
+            : > "$sdir/closure.tmp"     # when= may leave no dep at all
+            while read -r when types dep; do
+                when_matches "$when" "$version" || continue
                 visit "$dep"
                 depid=$VISIT_ID
                 printf '%s\n' "$depid" >> "$sdir/deps"
+                printf '%s %s\n' "$depid" "$types" >> "$sdir/edges"
                 printf '%s\n' "$depid" >> "$sdir/closure.tmp"
                 cat "$VAR/spec/$depid/closure" >> "$sdir/closure.tmp"
                 # order: the closure in DFS post-order over declared deps
@@ -121,6 +130,23 @@ visit() {
                 for c in $(cat "$VAR/spec/$depid/order") "$depid"; do
                     member_line "$c" "$sdir/order" || printf '%s\n' "$c" >> "$sdir/order"
                 done
+                # What goes on PATH, as Spack decides it: a build dep, and
+                # what it runs -- its run deps, through run and link edges.
+                case ,$types, in
+                    *,run,*) add_line "$depid" "$sdir/exec" ;;
+                esac
+                case ,$types, in
+                    *,run,*|*,link,*)
+                        for c in $(cat "$VAR/spec/$depid/exec"); do
+                            add_line "$c" "$sdir/exec"
+                        done ;;
+                esac
+                case ,$types, in
+                    *,build,*|*,test,*)
+                        for c in "$depid" $(cat "$VAR/spec/$depid/exec"); do
+                            add_line "$c" "$sdir/path"
+                        done ;;
+                esac
             done < "$VAR/recipe/$name/deps"
             sort -u "$sdir/closure.tmp" > "$sdir/closure"
             rm -f "$sdir/closure.tmp"
@@ -148,12 +174,12 @@ visit() {
                     printf 'load %s %s\n' "$(sha256_file "$STAR_ROOT/$f")" "$f"
                 done < "$VAR/recipe/$name/loads"
             fi
-            for dep in $(cat "$sdir/deps"); do
-                printf 'dep %s %s %s\n' \
+            while read -r dep types; do
+                printf 'dep %s %s %s %s\n' \
                     "$(cat "$VAR/spec/$dep/name")" \
                     "$(cat "$VAR/spec/$dep/version")" \
-                    "$(cat "$VAR/spec/$dep/hash")"
-            done | sort
+                    "$(cat "$VAR/spec/$dep/hash")" "$types"
+            done < "$sdir/edges" | sort
         } > "$sdir/manifest"
     fi
 
@@ -169,15 +195,17 @@ visit() {
 }
 
 # compose_path ID -> "ownbin:depbin:...:" -- the node's own bin dir, then the
-# bin dir of every closure member, most-derived first, each suffixed ':'. The
-# caller appends BASEPATH. The order is the node's own (a DFS post-order over
-# its declared dependencies, reversed), never the whole DAG's: which of two
-# dependencies' `ld` comes first must not depend on what else was concretized
-# alongside, since it is not in the hash.
+# bin dir of every node in its path set (build deps and what they run, not
+# link-only deps or the build deps of deps), most-derived first, each suffixed
+# ':'. The caller appends BASEPATH. The order is the node's own (a DFS
+# post-order over its declared dependencies, reversed), never the whole DAG's:
+# which of two dependencies' `ld` comes first must not depend on what else was
+# concretized alongside, since it is not in the hash.
 compose_path() {
     local out c
     out=$(cat "$VAR/spec/$1/prefix")/bin:
     for c in $(reverse_lines "$VAR/spec/$1/order"); do
+        member_line "$c" "$VAR/spec/$1/path" || continue
         out=$out$(cat "$VAR/spec/$c/prefix")/bin:
     done
     printf '%s' "$out"
@@ -367,17 +395,23 @@ cmd_find() {
     fi
 }
 
-# tree_line ID INDENT -- print one tree row: the node's hash in a fixed left
-# column (hashes are 7 chars, so they align), then INDENT and "name@version"
-# (with " (external)" on kaem-phase nodes).
+# tree_line ID INDENT TYPES -- print one tree row: the node's hash in a fixed
+# left column (hashes are 7 chars, so they align), the types of the edge that
+# reached it as Spack prints them ([bl  ]: build, link, run, test), then
+# INDENT and "name@version" (with " (external)" on kaem-phase nodes).
 tree_line() {
-    local n v h k tag
+    local n v h k tag t
     n=$(cat "$VAR/spec/$1/name")
     v=$(cat "$VAR/spec/$1/version")
     h=$(cat "$VAR/spec/$1/hash")
     k=$(cat "$VAR/spec/$1/kind")
     if [ "$k" = external ]; then tag=' (external)'; else tag=''; fi
-    printf '%s    %s%s@%s%s\n' "$h" "$2" "$n" "$v" "$tag"
+    t=
+    case ,$3, in *,build,*) t=${t}b ;; *) t="$t " ;; esac
+    case ,$3, in *,link,*) t=${t}l ;; *) t="$t " ;; esac
+    case ,$3, in *,run,*) t=${t}r ;; *) t="$t " ;; esac
+    case ,$3, in *,test,*) t=${t}t ;; *) t="$t " ;; esac
+    printf '%s  [%s]  %s%s@%s%s\n' "$h" "$t" "$2" "$n" "$v" "$tag"
 }
 
 # tree_print -- render the already-concretized DAG (on disk under $VAR: the
@@ -386,24 +420,27 @@ tree_line() {
 # parent, two spaces per level. Each node is printed exactly once, the first
 # time it is reached; a shared node already shown under an earlier parent is
 # skipped (not reprinted, not re-descended). The frontier is an explicit
-# stack held in one string, each frame a `<indent><TAB><id>` line; we pop the
+# stack held in one string, each frame a `<indent><TAB><types><TAB><id>` line
+# (types: of the edge that pushed it, '-' for a root); we pop the
 # front and prepend a node's children so they are visited before its
 # siblings. Pure read -- no recomputation, no arithmetic, within the budget.
 tree_print() {
-    local id dep stack rest frame indent cindent seen kids NL TAB
+    local id dep types stack rest frame indent cindent seen kids NL TAB
     NL='
 '
     TAB=$(printf '\t')
     # Seed the stack with the roots, in order (empty indent).
     stack=''
     for id in $(cat "$VAR/roots"); do
-        stack="$stack$TAB$id$NL"
+        stack="$stack$TAB-$TAB$id$NL"
     done
     seen=' '
     while [ -n "$stack" ]; do
         frame=${stack%%"$NL"*}      # front frame
         rest=${stack#*"$NL"}        # everything below it
         indent=${frame%%"$TAB"*}
+        frame=${frame#*"$TAB"}
+        types=${frame%%"$TAB"*}
         id=${frame#*"$TAB"}
         case $seen in
             *" $id "*)
@@ -413,13 +450,13 @@ tree_print() {
                 ;;
         esac
         seen="$seen$id "
-        tree_line "$id" "$indent"
+        tree_line "$id" "$indent" "$types"
         # Prepend children (recipe order) so DFS descends before siblings.
         cindent="$indent  "
         kids=''
-        for dep in $(cat "$VAR/spec/$id/deps"); do
-            kids="$kids$cindent$TAB$dep$NL"
-        done
+        while read -r dep types; do
+            kids="$kids$cindent$TAB$types$TAB$dep$NL"
+        done < "$VAR/spec/$id/edges"
         stack="$kids$rest"
     done
 }

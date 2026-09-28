@@ -198,7 +198,7 @@ do_patch() {
             esac
         done
         if [ -n "$cond_arch" ] && [ "$cond_arch" != "$ARCH" ]; then continue; fi
-        if [ -n "$cond_when" ] && [ "$cond_when" != "$version" ]; then continue; fi
+        if [ -n "$cond_when" ] && ! when_matches "$cond_when" "$version"; then continue; fi
         echo "==> $id: applying $file"
         command patch -p"$level" < "$package_dir/patches/$file"
     done < "$VAR/recipe/$name/patches"
@@ -281,7 +281,7 @@ cmd_build_one() {
     fi
     SHELL=$sh
     # SHELL via MAKEFLAGS so it reaches recursive sub-makes and overrides even a
-    # baked-in `SHELL = /bin/sh` (kernel headers, musl, gawk@3.0.4); otherwise a
+    # baked-in `SHELL = /bin/sh` (kernel headers, musl, gawk-boot); otherwise a
     # sub-make falls back to host /bin/sh, which the sandbox denies. Append to
     # preserve the dag.mk jobserver flags already here.
     MAKEFLAGS="${MAKEFLAGS:-} SHELL=$sh"
@@ -289,14 +289,18 @@ cmd_build_one() {
         HOME="$BUILD_HOME" SHELL sh PATH
 
     # Dirs the compiler-wrapper package injects as -I / -L / -Wl,-rpath, plus
-    # PKG_CONFIG_PATH for configure. Direct deps only: each shared lib records
-    # its own DT_RUNPATH at build time, so transitive libs resolve without the
-    # whole closure. Harmless for packages that don't use the wrapper -- the
-    # SHPACK_* vars are read only by the wrapper shims.
-    local depdir liblist p
+    # PKG_CONFIG_PATH for configure. Direct link deps only: each shared lib
+    # records its own DT_RUNPATH at build time, so transitive libs resolve
+    # without the whole closure. Harmless for packages that don't use the
+    # wrapper -- the SHPACK_* vars are read only by the wrapper shims.
+    local depdir deptypes liblist p
     SHPACK_INCLUDE_DIRS= SHPACK_LINK_DIRS= SHPACK_RPATH_DIRS=
     PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-}
-    for depdir in $(cat "$SPEC/deps"); do
+    while read -r depdir deptypes; do
+        case ,$deptypes, in
+            *,link,*) ;;
+            *) continue ;;
+        esac
         p=$(cat "$VAR/spec/$depdir/prefix")
         [ -d "$p/include" ] && \
             SHPACK_INCLUDE_DIRS=${SHPACK_INCLUDE_DIRS:+$SHPACK_INCLUDE_DIRS:}$p/include
@@ -307,7 +311,7 @@ cmd_build_one() {
             [ -d "$liblist/pkgconfig" ] && \
                 PKG_CONFIG_PATH=${PKG_CONFIG_PATH:+$PKG_CONFIG_PATH:}$liblist/pkgconfig
         done
-    done
+    done < "$SPEC/edges"
     export SHPACK_INCLUDE_DIRS SHPACK_LINK_DIRS SHPACK_RPATH_DIRS PKG_CONFIG_PATH
 
     stage_dir=$VAR/stage/$id

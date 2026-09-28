@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-package(
-    description = "zlib-ng 2.3.3 -- a zlib replacement with optimizations for modern "
-                  + "systems. Built in --zlib-compat mode, so it installs zlib.h and a "
-                  + "drop-in libz.so.1 carrying the classic zlib ABI.",
-    homepage = "https://github.com/zlib-ng/zlib-ng",
-    license = "Zlib",
-)
+"""zlib-ng 2.3.3 -- a zlib replacement with optimizations for modern systems.
+Built in --zlib-compat mode, so it installs zlib.h and a drop-in libz.so.1
+carrying the classic zlib ABI."""
+
+homepage = "https://github.com/zlib-ng/zlib-ng"
+license("Zlib")
 
 # GitHub source archive (extracts zlib-ng-2.3.3/). The archive carries a
 # hand-written ./configure (autotools-free), so no autoconf is needed.
@@ -31,9 +30,26 @@ build_system("generic")
 
 # 2.3.3: app-layer shared build via compiler-wrapper (final gcc 16).
 # 2.3.3-boot: toolchain-layer static build by gcc-boot-wrapper.
-depends_on("compiler-wrapper", "gmake", when = "@=2.3.3")
-depends_on("gcc-boot-wrapper", "glibc", "gmake", when = "@=2.3.3-boot")
-depends_on("dash")
+depends_on("compiler-wrapper", when = "@=2.3.3", type = "build")
+depends_on("gmake", when = "@=2.3.3", type = "build")
+depends_on("gcc-boot-wrapper", when = "@=2.3.3-boot", type = "build")
+depends_on("glibc", when = "@=2.3.3-boot")
+depends_on("gmake", when = "@=2.3.3-boot", type = "build")
+depends_on("sed@4.9-musl", when = "@=2.3.3-boot", type = "build")
+depends_on("grep-boot", when = "@=2.3.3-boot", type = "build")
+depends_on("gawk@5.3.1", when = "@=2.3.3-boot", type = "build")
+depends_on("diffutils", when = "@=2.3.3-boot", type = "build")
+depends_on("findutils", when = "@=2.3.3-boot", type = "build")
+depends_on("tar@1.35-musl", when = "@=2.3.3-boot", type = "build")
+depends_on("xz@5.2.5-musl", when = "@=2.3.3-boot", type = "build")
+depends_on("sed@4.9-musl", when = "@=2.3.3", type = "build")
+depends_on("grep-boot", when = "@=2.3.3", type = "build")
+depends_on("gawk@5.3.1", when = "@=2.3.3", type = "build")
+depends_on("diffutils", when = "@=2.3.3", type = "build")
+depends_on("findutils", when = "@=2.3.3", type = "build")
+depends_on("tar@1.35-musl", when = "@=2.3.3", type = "build")
+depends_on("xz@5.2.5-musl", when = "@=2.3.3", type = "build")
+depends_on("dash", type = "build")
 
 def install(ctx):
     # zlib-ng ships its own configure (not autotools); it honours $CC.
