@@ -119,6 +119,7 @@ star_sed() {
     local script f
     script=$1
     shift
+    [ $# -gt 0 ] || die "no file matched for $script"
     for f in "$@"; do
         [ -f "$f" ] || die "$f: no such file to edit"
     done
