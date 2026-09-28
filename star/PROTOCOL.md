@@ -1,0 +1,117 @@
+# The recipe protocol
+
+This is the contract between a package recipe (`package.star`), the evaluator
+that runs it, and the host that builds from the result. star is one
+evaluator; any other Starlark implementation of the [dialect](DIALECT.md) can
+take its place if it produces the same two records described below. The C
+code is not the interface.
+
+A backend has two jobs:
+
+1. `recipe(root, repo, name)`: load `repo/name/package.star` and return its
+   **directive record**.
+2. `plan(root, repo, name, ctx)`: evaluate the recipe's phases against a
+   **build context** and return the **action list** of each phase.
+
+Evaluation is pure. A recipe sees only its own text, the modules it loads,
+and the `ctx` value. Anything that depends on the machine or on build output
+happens later, when the host executes the actions.
+
+## Recipes
+
+A recipe is a Starlark module. The host predeclares the directives and the
+action constructors below; `load()` paths starting with `//` resolve against
+`root`, the directory that holds `build_systems/`.
+
+### Directives (callable only while the recipe loads)
+
+| directive | meaning |
+|---|---|
+| `package(description=, homepage=, license=)` | metadata; exactly once |
+| `version(ver, sha256=, url=, fname=)` | a buildable version and its source. The first declared version is the default for a bare name. `fname` defaults to the URL's basename. A version without `sha256` has no source. |
+| `resource(url=, sha256=, fname=, when=)` | an extra distfile, unpacked into the stage beside the main source |
+| `depends_on(spec, ..., when=)` | build dependencies, `name` or `name@version` (exact) |
+| `patch(file, level=1, when=)` | apply `patches/<file>` with `-p<level>` |
+| `build_system(name, when=)` | `generic`, `makefile` or `autotools`; the first matching call wins |
+| `parallel(bool)` | `parallel(False)`: build with `-j1` |
+| `build_directory(path)` | configure/build out of tree, in this subdirectory of the source |
+
+`when=` takes a subset of Spack's spec syntax: space-separated `@=VERSION`
+(exactly this version of the package) and `target=x86_64:` / `target=aarch64:`
+(the target family; `patch()` only). Anything else is an error.
+
+### Phases
+
+The build system (a module `//build_systems/<name>.star`) exports `phases`, a
+list of phase names, and a default function for each. A recipe overrides a
+phase by defining a function with the same name. Each phase is a function
+`f(ctx)` returning a list of actions. The host evaluates them in order:
+
+- `setup_build_environment(ctx)` first, if defined. It may return only
+  `setenv`, `prepend_path` and `unsetenv`.
+- then every phase in `phases`.
+
+A recipe calls a default explicitly, e.g.
+`load("//build_systems/autotools.star", autotools_install = "install")` and
+`return autotools_install(ctx) + [...]`. Build systems reach the recipe's
+argument hooks (`configure_args(ctx)`, `build_args`, `build_targets`,
+`install_targets`, all returning lists of strings) through `ctx.pkg`.
+
+### The build context
+
+`ctx` is a frozen struct:
+
+| field | |
+|---|---|
+| `name`, `version`, `id` | the node; `id` is `name-version` |
+| `arch` | `amd64` or `aarch64` |
+| `prefix` | the install prefix |
+| `sh` | the build shell (the recipe's `dash` dependency) |
+| `stage_dir`, `source_dir` | where sources are unpacked; the first directory there |
+| `package_dir`, `package_files` | the recipe's directory and the files in it (relative) |
+| `jobs`, `makejobs` | the job count; `[]`, or `["-j1"]` for `parallel(False)` |
+| `file_prefix_map`, `debug_prefix_map` | `-ffile-prefix-map=<stage>=.`, `-fdebug-prefix-map=<stage>=.` |
+| `build_directory` | the directive's value, or `None` |
+| `pkg` | a struct of the recipe's exported globals |
+| `dep(name)` | `.prefix` of `name` among the direct dependencies, then the closure |
+| `satisfies(when)` | the `when=` grammar, against this node |
+
+The shpack builder writes it as a Starlark file, `ctx = {...}`, with the
+fields above minus the computed ones (`build_directory`, `pkg`, `dep`,
+`satisfies`), plus `deps`, a dict from dependency name to prefix.
+
+## Actions
+
+Actions are structs of type `action` with an `op` field. Paths are relative
+to the current directory unless absolute. Where noted, a path may be a glob
+(`*`, `?`, `[...]`); `DIR/**/PATTERN` matches files at any depth. A glob must
+match something.
+
+| constructor | effect |
+|---|---|
+| `run(*argv, cwd=, env=, stdout=)` | run a program; list arguments are flattened one level |
+| `sh(script, cwd=)` | escape hatch: a POSIX sh script under the build shell with `-e`. For build steps that must inspect build output. |
+| `setenv(name, value)`, `prepend_path(name, value)`, `unsetenv(name)` | environment for the rest of the build |
+| `chdir(path)` | current directory for the rest of the build (glob allowed, matching one) |
+| `mkdir(path, ...)` | with parents |
+| `copy(src, dst, recursive=, preserve=, force=)` | `src` may be several paths or globs; `preserve` keeps modes, times and links |
+| `move(src, dst)` | |
+| `remove(paths, recursive=)` | missing paths are fine |
+| `symlink(target, link, force=, if_missing=)`, `hardlink(...)` | |
+| `symlink_each(targets, dir, prefix=, relative=, if_missing=, exclude=)` | a link `dir/<prefix><basename>` for each existing target (paths or globs, expanded once); `relative` links to the base name; `exclude` is a base-name glob |
+| `chmod(mode, paths)` | mode as octal digits, e.g. `"755"` |
+| `write_file(path, content, mode=)`, `append_file(path, content)` | exact bytes |
+| `substitute(files, old, new)` | replace every occurrence of the literal `old`, line by line |
+| `filter_file(files, regex, repl)` | replace every match of `regex` (the portable subset: literals, `.`, `*` after an atom, `^` first, `$` last, `[...]`, backslash-escaped metacharacters; `+ ? ( ) { } \|` must be escaped) with the literal `repl`, line by line |
+
+## Canonical forms
+
+`star recipe --format json` and `star plan --format json` print the two
+records as JSON. Keys appear in a fixed order: directives in declaration
+order, action fields sorted by name. Two backends agree when their JSON is
+byte-identical over a set of recipes. That is the test for swapping one in.
+
+The shpack host consumes other renderings of the same records.
+`--format shpack` writes the directive record as the state files under
+`$VAR/recipe/<name>/`. `--format sh` renders the plan as a POSIX sh script
+that uses two helpers the builder defines, `star_sed` and `star_rglob`.
