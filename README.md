@@ -114,7 +114,7 @@ d4senl5  [b   ]        python@3.8.20
 u64baoj  [b   ]        bison@3.8.2
 7gv2qwp  [b   ]        dash@0.5.13.4
 fbazrop  [bl  ]          glibc@2.43-boot
-f7yhxh6  [b   ]          dash-boot@0.5.12 (external)
+f7yhxh6  [b   ]          dash-boot@0.5.12
 k3bqbga  [b r ]    binutils@2.46.0
 k3lar2d  [bl  ]      libstdcxx-boot1@16.1.0
 o5c4buc  [bl  ]      zlib-ng@2.3.3-boot
@@ -122,9 +122,10 @@ c7xtxe4  [bl  ]      zstd@1.5.7-boot
 ```
 
 The column in brackets is the type of the dependency edge, as `spack spec -t`
-prints it: `b`uild, `l`ink, `r`un. The `(external)` nodes are part of the
-initial bootstrapping phase. All installed
-packages are put into unique prefixes `$STORE/<name>-<version>[-<hash>]`.
+prints it: `b`uild, `l`ink, `r`un. tcc, dash-boot and the other nodes below
+glibc's tools that the kaem phase installs are unhashed, at
+`$STORE/<name>-<version>`; every other package gets its own prefix
+`$STORE/linux-<target>/<name>-<version>-<hash>`.
 
 ### `shpack install spack`
 

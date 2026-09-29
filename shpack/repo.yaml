@@ -1,7 +1,9 @@
 # shpack's recipes as a Spack package repository (Package API v1: package
-# directories are package names). Spack loads package.star recipes through
-# the star backend (spack.star_package); shpack itself ignores this file.
+# directories are package names) whose packages are package.star recipes,
+# which Spack loads through the star backend (spack.star_package); shpack
+# itself ignores this file.
 repo:
   namespace: bootstrap
   api: v1.0
   subdirectory: packages
+  package_file: package.star

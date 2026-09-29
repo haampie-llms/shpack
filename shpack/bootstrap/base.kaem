@@ -43,8 +43,7 @@ mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
 kaem --verbose --strict --file ${PKG}/kaem.run
 
-# tcc 0.9.27 + (float-healed) musl 1.1.24 are now in the store; what follows
-# builds with a real makefile.
+# tcc 0.9.27 + (float-healed) musl 1.1.24 are now in the store.
 
 # make 3.82: first build tool; everything below builds with a real makefile.
 pkg=make-3.82
@@ -114,7 +113,7 @@ mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
 kaem --verbose --strict --file ${PKG}/kaem.run
 
-# --- 4. the shell phase ---------------------------------------------------------
+# --- the shell phase -----------------------------------------------------------
 # The base is complete: PATH now holds every kaem-phase prefix (newest first)
 # over the seed prefixes -- exactly the PATH floor shpack composes build PATHs
 # on. Hand over to shpack on the store dash (there is no /bin/sh), with the

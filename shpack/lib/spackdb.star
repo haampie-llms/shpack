@@ -14,9 +14,9 @@
 #
 # - Every record already there is kept: Spack may own part of the store (a
 #   package it installed, or an `install --overwrite` of one of shpack's).
-# - A node installed now -- its prefix has .spack/spec.json, or it is a
-#   kaem-phase external -- is recorded as installed unless it already was,
-#   with this run's time as its installation_time (BASEPATH has no `date`);
+# - A node installed now -- its prefix has .spack/spec.json -- is recorded as
+#   installed unless it already was, with this run's time as its
+#   installation_time (from star: `date` is off limits in bin/ and lib/);
 #   a requested (root) node is marked explicit, as `spack install` does.
 # - ref_count is recounted over the whole database, as Spack counts it: the
 #   records that depend on a node.

@@ -67,10 +67,12 @@ _TARGETS = {"amd64": "x86_64", "aarch64": "aarch64"}
 # Spack with that repo registered knows the recorded specs, so it reuses them.
 _NAMESPACE = "bootstrap"
 _SPECFILE_VERSION = 6    # spack.spec.SPECFILE_FORMAT_VERSION
+_PLATFORM_OS = "shpack"  # star_recipe.STAR_OS on the Spack side
 
-def _b32pad(hexdigest):
+def _b32(hexdigest):
     """base64.b32encode(digest).lower(), padding included: how Spack spells a
-    package hash (the base32 SHA-256 of spack.package_base.content_hash)."""
+    package hash (the base32 SHA-256 of spack.package_base.content_hash) and,
+    unpadded since 160 bits are 32 characters, a SHA-1 (spack.util.hash.b32_hash)."""
     nbits = len(hexdigest) * 4
     out = []
     for i in range((nbits + 4) // 5):
@@ -82,18 +84,6 @@ def _b32pad(hexdigest):
                 v += (int(hexdigest[bit // 4], 16) >> (3 - bit % 4)) & 1
         out.append(_B32[v])
     return "".join(out) + "=" * ((8 - len(out) % 8) % 8)
-
-def _b32(hexdigest):
-    """The first 32 characters of the lowercase base32 encoding of a digest:
-    all of a SHA-1's, which is how Spack spells a DAG hash (spack.util.hash.
-    b32_hash)."""
-    out = []
-    for i in range(32):
-        bit = 5 * i
-        j = bit // 4
-        byte = int(hexdigest[j:j + 2], 16)
-        out.append(_B32[(byte >> (3 - bit % 4)) & 31])
-    return "".join(out)
 
 def _add(lst, x):
     if x not in lst:
@@ -120,6 +110,8 @@ def concretize(host, cfg, specs):
 
     def versions(rec):
         return [d for d in rec["directives"] if d["directive"] == "version"]
+
+    load_sha = {}   # module path -> sha256, for package_text
 
     kaem = {}
     def kaem_steps(name):
@@ -207,7 +199,7 @@ def concretize(host, cfg, specs):
         # star-recipes adapter) computes the same, so it installs where shpack
         # does. Stamps, logs and trees use the first 7, as `spack find -l`.
         n["manifest"] = package_text(r)
-        node = spack_node(r, n, f["edges"])
+        node = spack_node(r, n["manifest"], f["edges"])
         n["spack_hash"] = _b32(host.sha1(host.json(node, compact = True)))
         n["hash"] = n["spack_hash"][:7]
         node["hash"] = n["spack_hash"]
@@ -220,14 +212,15 @@ def concretize(host, cfg, specs):
         active.pop(r.id)
         topo.append(r.id)
 
-    def spack_node(r, n, edges):
+    def spack_node(r, text, edges):
         """The node as Spack's Spec.to_node_dict makes it, key for key: what the
         DAG hash is computed over (spec.json and .spack-db add the hash)."""
-        patches = [sha for sha, _ in applied_patches(r)]
+        applied = applied_patches(r)
+        patches = [sha for sha, _ in applied]
         node = {
             "name": r.name,
             "version": r.version,
-            "arch": {"platform": "linux", "platform_os": cfg.get("platform_os", "shpack"),
+            "arch": {"platform": "linux", "platform_os": _PLATFORM_OS,
                      "target": _TARGETS.get(cfg["arch"], cfg["arch"])},
             "namespace": _NAMESPACE,
             # variants by name, then the compiler flags
@@ -244,7 +237,7 @@ def concretize(host, cfg, specs):
             node["external"] = {"path": r.prefix, "module": None, "extra_attributes": {}}
         if patches:
             node["patches"] = patches   # in order of appearance
-        node["package_hash"] = content_hash(r)
+        node["package_hash"] = content_hash(r, text, applied)
         # Every edge is a build edge, as Spack declares the recipe's (star/SPACK.md,
         # "Dependency types"): a reused node's link or run edges would pull their
         # targets into Spack's root unification set, which only link/run edges of
@@ -264,15 +257,19 @@ def concretize(host, cfg, specs):
                 (d["sha256"], d["fname"], d["url"] or "-") for d in ds
                 if d["directive"] == "resource" and _when_matches(d["when"], r.version)]
 
+    def patch_directives(r):
+        """The recipe's patch directives that apply, in recipe order."""
+        return [d for d in record(r.name)["directives"]
+                if d["directive"] == "patch" and _when_matches(d["when"], r.version, cfg["arch"])]
+
     def applied_patches(r):
         """(sha256, level) of the recipe's patches that apply, in recipe order."""
         if r.kind == "external":
             return []
         return [(host.sha256_file("%s/%s/patches/%s" % (cfg["repo"], r.name, d["file"])),
-                 d["level"]) for d in record(r.name)["directives"]
-                if d["directive"] == "patch" and _when_matches(d["when"], r.version, cfg["arch"])]
+                 d["level"]) for d in patch_directives(r)]
 
-    def content_hash(r):
+    def content_hash(r, text, applied):
         """spack.package_base.content_hash, which Spack records as the package
         hash: the version's source digest, each applied patch as "SHA:LEVEL",
         and the base32 SHA-1 of the package text, sorted and concatenated."""
@@ -280,25 +277,23 @@ def concretize(host, cfg, specs):
                   if d["directive"] == "version" and d["version"] == r.version and
                   d["sha256"]]
         parts = [digest[0] if digest else ""]
-        parts += ["%s:%d" % p for p in applied_patches(r)]
-        parts.append(_b32(host.sha1(package_text(r))))
-        return _b32pad(host.sha256("".join(sorted(parts))))
+        parts += ["%s:%d" % p for p in applied]
+        parts.append(_b32(host.sha1(text)))
+        return _b32(host.sha256("".join(sorted(parts))))
 
     def build_inputs(r):
         """The builder's files from the recipe: sources, patches, parallel."""
         rec = record(r.name)
         files = {
             "sources": _lines(["%s %s %s" % s for s in sources(r)]),
-            "patches": _lines(["%s %d" % (d["file"], d["level"]) for d in rec["directives"]
-                               if d["directive"] == "patch" and
-                               _when_matches(d["when"], r.version, cfg["arch"])]),
+            "patches": _lines(["%s %d" % (d["file"], d["level"]) for d in patch_directives(r)]),
         }
         if not rec["parallel"]:
             files["parallel"] = "false\n"
         return files
 
     def package_text(r):
-        """What Spack's package hash sees of a recipe (star_package.source_hash):
+        """What Spack's package hash sees of a recipe (star_recipe.source_hash):
         everything that determines the build but the dependencies, which the
         DAG hash covers by their own hashes."""
         rec = record(r.name)
@@ -328,7 +323,9 @@ def concretize(host, cfg, specs):
         # it loads (build systems, helpers), by content.
         out.append("evaluator " + host.star_version)
         for path in rec["loads"]:
-            out.append("load %s %s" % (host.sha256_file(cfg["star_root"] + "/" + path), path))
+            if path not in load_sha:
+                load_sha[path] = host.sha256_file(cfg["star_root"] + "/" + path)
+            out.append("load %s %s" % (load_sha[path], path))
         return _lines(out)
 
     def visit(spec):
@@ -377,12 +374,12 @@ def concretize(host, cfg, specs):
         for k, v in n.get("recipe", {}).items():
             files[d + k] = v
         # The node as Spack sees it, for the database (spackdb.star); and, for
-        # a built node, the prefix's .spack/spec.json: it and its closure.
+        # an installed node, the prefix's .spack/spec.json: it and its closure.
         files[d + "spack.json"] = n["spack"] + "\n"
         if n["kind"] != "external":
             ids = [id] + n["closure"]
             files[d + "spack-spec.json"] = (
-                '{"spec": {"_meta": {"version": 6}, "nodes": [' +
+                '{"spec": {"_meta": {"version": %d}, "nodes": [' % _SPECFILE_VERSION +
                 ", ".join([nodes[c]["spack"] for c in ids]) + "]}}\n")
     files["index"] = _lines(["%s %s %s %s %s" % (nodes[id]["name"], nodes[id]["version"],
                                                  nodes[id]["hash"], nodes[id]["kind"],
@@ -439,32 +436,29 @@ def dagmk(cfg, nodes, topo, roots, compose_path):
                             if nodes[d]["kind"] != "external"]))
         if n["kind"] == "kaem":
             # installed by the kaem phase: only its metadata goes in
-            out.append("\t@%s %s/bin/shpack register-one %s >$(L)/%s.log 2>&1 \\" %
-                       ("$(SHELL)", cfg["shpack_root"], id, id))
-            out.append('\t  || { echo "!! %s FAILED, tail of $(L)/%s.log:"; tail -n 40 $(L)/%s.log; exit 1; }' %
-                       (id, id, id))
-            out.append("\t@touch $@")
-            out.append("")
-            continue
-        # The sandbox needs the prefix to exist before it can grant write to
-        # it; $(V) grants the whole scratch. The log redirect, touch and cp run
-        # outside the wrapper.
-        pre, wrap = "", ""
-        if sandbox:
-            pre = "mkdir -p %s; " % prefix
-            wrap = ("$(SANDBOX) --read $(STORE) --read $(SHPACK) --read $(REPO) " +
-                    "--read $(DISTFILES) --write $(V) --write %s -- " % prefix)
-        out.append("\t+@%sPATH=%s$(BASEPATH) \\" % (pre, compose_path(id)))
-        out.append("\t  %s$(SHELL) %s/bin/shpack build-one %s >$(L)/%s.log 2>&1 \\" %
-                   (wrap, cfg["shpack_root"], id, id))
+            out.append("\t@$(SHELL) %s/bin/shpack register-one %s >$(L)/%s.log 2>&1 \\" %
+                       (cfg["shpack_root"], id, id))
+        else:
+            # The sandbox needs the prefix to exist before it can grant write
+            # to it; $(V) grants the whole scratch. The log redirect, touch and
+            # cp run outside the wrapper.
+            pre, wrap = "", ""
+            if sandbox:
+                pre = "mkdir -p %s; " % prefix
+                wrap = ("$(SANDBOX) --read $(STORE) --read $(SHPACK) --read $(REPO) " +
+                        "--read $(DISTFILES) --write $(V) --write %s -- " % prefix)
+            out.append("\t+@%sPATH=%s$(BASEPATH) \\" % (pre, compose_path(id)))
+            out.append("\t  %s$(SHELL) %s/bin/shpack build-one %s >$(L)/%s.log 2>&1 \\" %
+                       (wrap, cfg["shpack_root"], id, id))
         out.append('\t  || { echo "!! %s FAILED, tail of $(L)/%s.log:"; tail -n 40 $(L)/%s.log; exit 1; }' %
                    (id, id, id))
-        # the log of the build that made the prefix: not if shpack or Spack
-        # (which gzips it) left one already
-        out.append(("\t@test -f %s/.spack/spack-build-out.txt -o -f %s/.spack/spack-build-out.txt.gz " +
-                    "|| cp $(L)/%s.log %s/.spack/spack-build-out.txt") % (prefix, prefix, id, prefix))
-        # Post-install marker, Spack-style, so the prefix is copy-pasteable.
-        out.append('\t@echo "[+] %s %s@%s %s"' % (n["hash"], n["name"], n["version"], prefix))
+        if n["kind"] == "built":
+            # the log of the build that made the prefix: not if shpack or
+            # Spack (which gzips it) left one already
+            out.append(("\t@test -f %s/.spack/spack-build-out.txt -o -f %s/.spack/spack-build-out.txt.gz " +
+                        "|| cp $(L)/%s.log %s/.spack/spack-build-out.txt") % (prefix, prefix, id, prefix))
+            # Post-install marker, Spack-style, so the prefix is copy-pasteable.
+            out.append('\t@echo "[+] %s %s@%s %s"' % (n["hash"], n["name"], n["version"], prefix))
         out.append("\t@touch $@")
         out.append("")
     return _lines(out)

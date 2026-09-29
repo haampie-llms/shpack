@@ -217,27 +217,34 @@ protocol_env() {
     rm -f "$VAR/exports.$$"
 }
 
-do_finalize() {
-    # Metadata as Spack keeps it, in .spack/: the recipe directory under
-    # repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's), and shpack's
-    # own hash input and plan (the build log is copied in by dag.mk, as
-    # spack-build-out.txt).
+# write_metadata -- the end of every install, built or registered. Metadata
+# as Spack keeps it, in .spack/: the recipe directory under
+# repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's) and shpack's own
+# hash input (a build's plan and log are copied in before this). Then modes:
+# they are part of what an install produces, so fix them rather than inherit
+# the umask and whatever the tarballs carried (the mescc-tools cp makes 0600
+# files): directories 755, files 644, or 755 if executable at all (Spack's
+# default install permissions too). .spack/spec.json last: it marks the
+# prefix installed, for shpack and Spack alike.
+write_metadata() {
     mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
-    cp -R "$package_dir" "$PREFIX/.spack/repos/bootstrap/packages/$name"
+    rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
+    cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
     cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
+    chmod -R u=rwX,go=rX "$PREFIX"
+    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+}
+
+do_finalize() {
+    # The plan (the build log is copied in by dag.mk, as spack-build-out.txt).
+    mkdir -p "$PREFIX/.spack"
     cp "$SPEC/build.sh" "$PREFIX/.spack/shpack-build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
     # world links via libtool, and they bake build-time paths / dependency
     # orderings that differ across builds. A glob, not find -- shpack core has no
     # find; these always land directly in lib/ (and lib64/).
     rm -f "$PREFIX"/lib/*.la "$PREFIX"/lib64/*.la
-    # Modes are part of what a build produces, so fix them rather than inherit
-    # the umask and whatever the tarballs carried: directories 755, files 644,
-    # or 755 if executable at all (Spack's default install permissions too).
-    chmod -R u=rwX,go=rX "$PREFIX"
-    # .spack/spec.json last: it marks the prefix installed, for shpack and
-    # Spack alike.
-    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+    write_metadata
     cd /
     # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
     [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
@@ -245,7 +252,7 @@ do_finalize() {
 
 # cmd_register_one -- a node the kaem phase installed (its recipe's
 # kaem-steps): the prefix is there, so it only gets its metadata, as a build's
-# finalize writes it; .spack/spec.json marks it installed.
+# finalize writes it.
 cmd_register_one() {
     if [ $# -ne 1 ]; then die "usage: shpack register-one <id>"; fi
     id=$1
@@ -254,14 +261,7 @@ cmd_register_one() {
     name=$(cat "$SPEC/name")
     PREFIX=$(cat "$SPEC/prefix")
     [ -d "$PREFIX" ] || die "$id: the kaem phase did not install $PREFIX"
-    # Modes as a build's finalize leaves them (the kaem phase's follow the
-    # umask, and the mescc-tools cp makes 0600 files).
-    chmod -R u=rwX,go=rX "$PREFIX"
-    mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
-    rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
-    cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
-    cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
-    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+    write_metadata
     echo "==> $id: registered $PREFIX"
 }
 
@@ -270,7 +270,7 @@ cmd_build_one() {
     id=$1
     SPEC=$VAR/spec/$id
     [ -f "$SPEC/kind" ] || die "unknown node '$id' (run shpack concretize)"
-    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is external"
+    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is not built by shpack (external or kaem)"
     name=$(cat "$SPEC/name")
     version=$(cat "$SPEC/version")
     hash=$(cat "$SPEC/hash")
