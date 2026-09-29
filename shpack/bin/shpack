@@ -72,6 +72,7 @@ export PATCH_SHEBANGS
 . "$SHPACK_LIB/spec.sh"
 . "$SHPACK_LIB/concretize.sh"
 . "$SHPACK_LIB/builder.sh"
+. "$SHPACK_LIB/install.sh"
 
 mkdir -p "$VAR"
 
@@ -97,8 +98,8 @@ usage: shpack <command> [args]
                         dag.mk, but do not build
   spec <spec>...        concretize and show the dependency DAG as an
                         indented tree (each node once, indent = depth)
-  build-one <id>        build a single concretized node (internal; invoked
-                        from dag.mk recipes)
+  build-one <id>        build a single concretized node with the store's
+                        builder (internal; invoked from dag.mk recipes)
   register-one <id>     record a node the kaem phase installed (internal)
   env <name|id>         print the composed build environment of a node
   find                  list concretized/installed packages

@@ -143,8 +143,14 @@ match something.
 
 A host executes plans. Two hosts give byte-identical installs of the same
 recipe (up to the store paths in them) when they agree on the following. This
-is what shpack's builder does, and what Spack's adapter (`spack.star_package`)
-reproduces:
+is what shpack's builder does (`shpack/lib/builder.sh`), and shpack and Spack's
+adapter (`spack.star_package`) both build by running that builder, which the
+kaem phase installs as the package `shpack-builder`, from the store. What a
+host gives it is the concrete DAG as state files, `spec/<id>/` for the node
+and each node of its closure (`name`, `prefix`, `kind`, `edges` with the
+recipe's types, a kaem node's `step`; for the node, `version`, `deps`,
+`closure`, `sources`, `patches`, `parallel`), and the builder derives the
+rest:
 
 - **Resolution.** `name@version` pins that exact version. A bare name means
   the first version its recipe declares; a recipe always beats an external of
@@ -164,7 +170,10 @@ reproduces:
     and `link` edges. They are not the node's own `run`-only dependencies,
     its `link`-only ones, or the build dependencies of its dependencies. They
     appear in the reverse of a DFS post-order over the declared dependencies
-    (all types).
+    (all types). The base is the kaem phase's PATH as it hands over to the
+    shell phase: the kaem-phase nodes of the closure in that same order, the
+    newest step first, then the seed's (`shpack/bootstrap/seed.path`).
+    `CONFIG_SHELL` is dash-boot's `sh`.
   - `SOURCE_DATE_EPOCH=0`; `SHELL`, `sh` and `MAKEFLAGS` carry `ctx.sh`;
     `HOME` and `TMPDIR` are build scratch.
   - Also set: `PREFIX`, `ARCH`, `JOBS`, `makejobs`, and, from the direct
