@@ -12,7 +12,7 @@
 
 # sandbox: the Landlock build-step launcher (project-original C, statically
 # linked with the just-built tcc+musl). The shell phase wraps every build with
-# it (see concretize.sh emit_dagmk), so it is built here as soon as tcc+musl
+# it (see concretize.star dagmk), so it is built here as soon as tcc+musl
 # exist.
 pkg=sandbox-1.0
 PREFIX=${STORE}/${pkg}
