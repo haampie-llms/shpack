@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""GNU tar 1.12, as the kaem phase builds it (shpack/bootstrap/tar-1.12), with tcc 0.9.27
-and musl and the kaem-phase tools before it, all in one prefix
-($STORE/tar-boot-1.12). kaem-steps names the step: shpack takes it as installed by
-the kaem phase, and Spack's star-recipes adapter runs the step's kaem.run.
-No other phase applies."""
+"""GNU tar 1.12, as the kaem phase builds it (shpack/bootstrap/tar-1.12), with tcc
+0.9.27, musl and the kaem-phase tools before it, into the unhashed $STORE/tar-
+boot-1.12. kaem-steps names the step and what it reads: shpack takes the
+package as installed by the kaem phase, and Spack's star-recipes adapter runs
+the step's kaem.run. No other phase applies."""
 
 homepage = "https://www.gnu.org/software/tar/"
 license("GPL-2.0-or-later")

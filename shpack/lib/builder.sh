@@ -192,6 +192,31 @@ do_patch() {
     done < "$SPEC/patches"
 }
 
+# protocol_env -- a plan sees the environment star/PROTOCOL.md defines, and
+# nothing of shpack's own (ROOT, STORE, SHPACK_*, ...: a Makefile reads its
+# environment): everything else is un-exported, kept as a shell variable for
+# the builder's helpers. Another host (Spack's adapter) builds the same one.
+protocol_env() {
+    local line name val
+    export -p > "$VAR/exports.$$"
+    while read -r line; do
+        case $line in
+            "export "*) ;;
+            *) continue ;;   # the rest of a multi-line value
+        esac
+        name=${line#export }
+        name=${name%%=*}
+        case $name in
+            PATH|PWD|CONFIG_SHELL|HOME|TMPDIR|TERM|PREFIX|ARCH|JOBS|makejobs|sh|SHELL|\
+            MAKEFLAGS|MFLAGS|MAKELEVEL|SOURCE_DATE_EPOCH|PKG_CONFIG_PATH|\
+            SHPACK_INCLUDE_DIRS|SHPACK_LINK_DIRS|SHPACK_RPATH_DIRS|SHPACK_FILE_PREFIX_MAP) ;;
+            *[!A-Za-z0-9_]*|'') ;;
+            *) eval "val=\${$name}"; unset "$name"; eval "$name=\$val" ;;
+        esac
+    done < "$VAR/exports.$$"
+    rm -f "$VAR/exports.$$"
+}
+
 do_finalize() {
     # Metadata as Spack keeps it, in .spack/: the recipe directory under
     # repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's), and shpack's
@@ -359,6 +384,7 @@ cmd_build_one() {
     "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
         "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
     mkdir -p "$PREFIX"
+    protocol_env
     # The environment the plan runs in, for the record (and for other hosts
     # of the same recipe to compare against).
     export -p > "$SPEC/env"

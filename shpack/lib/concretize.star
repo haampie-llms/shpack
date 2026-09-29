@@ -30,9 +30,8 @@
 # backtracking: `name@version` pins that exact version; a bare name is the
 # first version its recipe declares; a recipe always beats an external
 # (cfg["externals"], "name@version prefix" lines), which are the fallback for
-# names with no recipe and for explicit pins onto kaem-phase seeds. A name
-# listed there as "NAME buildable=false" (Spack's `buildable: false`) has its
-# recipe ignored: that recipe is a stub, so that Spack knows the package.
+# names with no recipe and for explicit version pins. A version listed in its
+# recipe's kaem-steps is the kaem phase's (kind kaem): registered, not built.
 #
 # Starlark has no recursion or while: the depth-first walks keep their own
 # stacks, and loop over a range that is far longer than any DAG.
@@ -112,17 +111,12 @@ def concretize(host, cfg, specs):
         return records[name]
 
     externals = []
-    unbuildable = {}    # "NAME buildable=false": the recipe is only there for Spack
     text = host.read(cfg["externals"])
     for line in (text or "").split("\n"):
         fields = line.strip(" \t").split(None, 1)
         if not fields or fields[0].startswith("#"):
             continue
-        rest = fields[1].strip(" \t") if len(fields) > 1 else ""
-        if rest == "buildable=false":
-            unbuildable[fields[0]] = True
-            continue
-        externals.append((fields[0], rest))
+        externals.append((fields[0], fields[1].strip(" \t") if len(fields) > 1 else ""))
 
     def versions(rec):
         return [d for d in rec["directives"] if d["directive"] == "version"]
@@ -143,7 +137,7 @@ def concretize(host, cfg, specs):
 
     def resolve(spec):
         name, at, want = spec.partition("@")
-        rec = None if name in unbuildable else record(name)
+        rec = record(name)
         if rec:
             for d in versions(rec):
                 if at and d["version"] != want:

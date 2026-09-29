@@ -26,9 +26,8 @@ done
 if [ -n "${STAR:-}" ]; then
     for d in packages/*/; do
         n=${d%/}; n=${n##*/}
-        # stubs of packages shpack never builds (etc/externals), and the kaem
-        # phase's packages (kaem-steps), which come before any shell
-        if grep -qE "^$n[ 	]+buildable=false\$" etc/externals || [ -f "$d/kaem-steps" ]; then
+        # the kaem phase's packages (kaem-steps) come before any shell
+        if [ -f "$d/kaem-steps" ]; then
             continue
         fi
         missing=$("$STAR" recipe --repo packages --root . --format shpack "$n" | awk '
@@ -74,6 +73,15 @@ if [ -n "${STAR:-}" ]; then
             bad=1
         fi
     done
+fi
+
+# The Spack environment (../spack.yaml) installs exactly the kaem phase's
+# packages unhashed, as the kaem phase does.
+want=$(for k in packages/*/kaem-steps; do n=${k%/kaem-steps}; echo "${n##*/}"; done | sort)
+got=$(sed -n 's/^        \([a-z0-9-]*\): "{name}-{version}"$/\1/p' ../spack.yaml | sort)
+if [ "$want" != "$got" ]; then
+    printf 'spack.yaml projections disagree with kaem-steps:\n%s\n--- vs ---\n%s\n' "$got" "$want" >&2
+    bad=1
 fi
 
 # The sh() escape hatch in Starlark recipes: allowed, but counted, so the

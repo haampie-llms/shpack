@@ -59,16 +59,40 @@ stage0 seed itself on a copy of the tree (`COMMAND=seed`), any other step by
 its `kaem.run` under the kaem phase's environment contract, with the step's
 archives unexpanded in a DISTFILES directory and PATH composed as start.kaem
 composes it (the step, the steps before it newest first, `seed.path`). They
-install unhashed: Spack needs `{name}-{version}` projections for them in
-`config:install_tree:projections`. The shell phase's base environment
-(`SPACK_STAR_BASE_ENV`) holds BASEPATH, the kaem steps' bins newest first and
-then `seed.path`.
+install unhashed, by the `{name}-{version}` projections of the tree's
+`spack.yaml`.
+
+A shell-phase build's base PATH and `CONFIG_SHELL` are the kaem phase's as it
+hands over to shpack: those of its last step (the kaem-phase node in the DAG
+with all the others below it, dash-boot), i.e. the kaem steps' bins newest
+first, then `seed.path`, and dash-boot's `sh`.
+
+## Staging and the sandbox
+
+The tree is a Spack environment (`spack.yaml`): the `bootstrap` repository
+alone, the projections, and the new installer with its Landlock sandbox on.
+
+    spack -e . install --add gcc-boot0
+
+Spack fetches and checks every archive (version and `resource()`, all left
+unexpanded), so mirrors see them. Staging then copies into the stage what the
+build reads, before the sandbox applies: the archives under their names, the
+recipe directory and the modules it loads, a kaem step's inputs, and
+`seed.path`, i.e. what the package hash covers. The build, sandboxed, reads
+only that copy and its dependencies' prefixes, and writes only its stage and
+prefix: it unpacks and patches with the tools on its PATH (no shell), finds
+`patch-shebangs` there, and evaluates the plan from the copied recipe. Spack's
+`get_user()` is memoized, so the stage path resolves once `/etc/passwd` is
+out of reach. `spack install --keep-stage` keeps the stage, with the plan's
+environment in `shpack/env`.
 
 ## Status
 
-Spack built the full gcc 16 DAG (31 packages) from these recipes. It ran with
-shpack's staging and build environment, into a store whose paths have the
-same length as shpack's.
+Up to gcc-boot0 (23 packages, from the stage0 seed), `spack -e . install`
+into an empty store, sandboxed, gives the prefixes the single-execve bootstrap
+gives, byte for byte (`.spack/` aside). Before the hashes were shared, Spack
+built the full gcc 16 DAG (31 packages) from these recipes, into a store whose
+paths had the same length as shpack's:
 
 - **22 of 31 prefixes are byte-identical** to shpack's, including modes, once
   the hashes in store paths are rewritten. These cover the whole tcc/musl
@@ -85,17 +109,14 @@ same length as shpack's.
   aarch64's `MULTILIB_OSDIRNAMES` in one build and not in the other. The
   environments the two hosts construct for this build are identical apart
   from the jobserver fds. Keep both stages (`SHPACK_KEEP_STAGE`,
-  `SPACK_STAR_KEEP_STAGE`) and diff `gcc/Makefile` and `s-mlib`.
+  `spack install --keep-stage`) and diff `gcc/Makefile` and `s-mlib`.
   gcc 16's 45 differences probably follow from this.
-- **gcc-boot0, gcc-boot2.** Only `executable_checksum` in cc1/cc1plus
-  differs; the linked code is identical. One of genchecksum's inputs differs:
-  the objects, the archives, or `checksum-options`.
+- **gcc-boot2.** Only `executable_checksum` in cc1/cc1plus differed (as in
+  gcc-boot0, which is identical since the builds share hashes and prefixes);
+  check again.
 - **python 3.8.** The `_sysconfigdata` `.pyc` files differ; they record
   build-time variables.
 - **glibc, glibc-boot, dash, libstdcxx-boot1.** One to four files each, not
   looked at yet.
-- **Spack.** `resource()` is fetched by the adapter, so `spack mirror`
-  doesn't see resources. Class construction relies on the directive queue
-  (`DirectiveMeta`), an internal. Parity with shpack needs
-  `SPACK_STAR_STAGE_ROOT`, `SPACK_STAR_BASE_ENV` and
-  `SPACK_STAR_PATCH_SHEBANGS`; ordinary use would not.
+- **Spack.** Class construction relies on the directive queue
+  (`DirectiveMeta`), an internal.

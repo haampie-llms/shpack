@@ -206,18 +206,4 @@ assert_contains "$TESTDIR/spec.top" "[b   ]    tl@1.0"
 assert_contains "$TESTDIR/spec.top" "[  r ]      rt@1.0"
 assert_contains "$TESTDIR/spec.top" "[bl  ]    lk2@1.0"
 
-# "NAME buildable=false": NAME's recipe is a stub for Spack; it resolves to the
-# external. As in Spack, the external's hash covers its recipe and its path.
-shpack concretize tool > /dev/null
-eh=$(index_field ext 3)
-mkstar ext <<'EOF'
-"""a stub of the external"""
-version("3.0")
-EOF
-echo "ext buildable=false" >> "$SHPACK_EXTERNALS"
-shpack concretize tool > /dev/null
-assert_eq "$(index_field ext 4)" external "unbuildable ext kind"
-[ "$(index_field ext 3)" != "$eh" ] || fail "an external's hash must cover its recipe"
-assert_contains "$SHPACK_VAR/spec/ext-3.0/spack.json" '"path": "/fake/ext-3.0"'
-
 echo OK

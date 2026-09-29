@@ -299,9 +299,15 @@ step in `kaem-steps` (`VERSION STEP INPUT...`: the version, the
 its package hash covers). They install unhashed at `$STORE/<name>-<version>`.
 shpack takes them as installed by the kaem phase and only records them; Spack
 builds them itself, the seed by the stage0 seed (`COMMAND=seed`) and every
-other step by its `kaem.run`, given `{name}-{version}` projections for them.
-So `spack install gcc-boot0` into an empty store builds the same DAG from the
-same stage0 seed, into the same prefixes (star/SPACK.md).
+other step by its `kaem.run`. The tree is a Spack environment (`spack.yaml`:
+this repository, those prefixes, and Spack's Landlock build sandbox), so
+
+```console
+$ spack -e . install --add gcc-boot0
+```
+
+builds the same DAG from the same stage0 seed into an empty store, each build
+sandboxed, and gives the same prefixes, byte for byte (star/SPACK.md).
 
 ## Scheduling
 

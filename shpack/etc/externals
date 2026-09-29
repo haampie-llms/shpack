@@ -6,8 +6,5 @@
 # externals matter for names with no recipe and for explicit @version pins.
 # Within this table the first matching line wins, so list preferred first.
 #
-# "NAME buildable=false" is Spack's `buildable: false`: NAME always resolves to
-# an external here, whatever its recipe says.
-#
 # The kaem phase's packages are not externals: their recipes list them in
 # kaem-steps, and shpack takes them as installed at $STORE/<name>-<version>.

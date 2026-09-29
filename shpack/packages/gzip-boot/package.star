@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""gzip 1.2.4, as the kaem phase builds it (shpack/bootstrap/gzip-1.2.4), with tcc 0.9.27
-and musl and the kaem-phase tools before it, all in one prefix
-($STORE/gzip-boot-1.2.4). kaem-steps names the step: shpack takes it as installed by
-the kaem phase, and Spack's star-recipes adapter runs the step's kaem.run.
-No other phase applies."""
+"""gzip 1.2.4, as the kaem phase builds it (shpack/bootstrap/gzip-1.2.4), with tcc
+0.9.27, musl and the kaem-phase tools before it, into the unhashed $STORE/gzip-
+boot-1.2.4. kaem-steps names the step and what it reads: shpack takes the
+package as installed by the kaem phase, and Spack's star-recipes adapter runs
+the step's kaem.run. No other phase applies."""
 
 homepage = "https://www.gnu.org/software/gzip/"
 license("GPL-2.0-or-later")

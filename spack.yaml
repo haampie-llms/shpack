@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MIT
+#
+# This tree as a Spack environment: shpack's recipes as the `bootstrap` package
+# repository, and the store they install into, laid out as shpack lays it out.
+#
+#     spack -e . install --add gcc-boot0
+#
+# builds from the stage0 seed what the single-execve bootstrap builds, into the
+# same prefixes (star/SPACK.md), each build under Spack's Landlock sandbox.
+# Needs the star-recipes branch of Spack (package.star) and Linux.
+spack:
+  specs: []
+  view: false
+  # the only repository: every package of the bootstrap is one of shpack's
+  # recipes, whose names (gmake, gcc, dash, ...) are builtin's too
+  repos::
+    bootstrap: $env/shpack
+  config:
+    install_tree:
+      root: $env/store
+      projections:
+        all: "{architecture.platform}-{architecture.target}/{name}-{version}-{hash}"
+        # the kaem phase's packages (kaem-steps) are unhashed, as the kaem phase
+        # installs them and as tcc bakes its own prefix in
+        bzip2-boot: "{name}-{version}"
+        coreutils-boot: "{name}-{version}"
+        dash-boot: "{name}-{version}"
+        gmake-boot: "{name}-{version}"
+        gzip-boot: "{name}-{version}"
+        patch-boot: "{name}-{version}"
+        patch-shebangs: "{name}-{version}"
+        sandbox: "{name}-{version}"
+        sed-boot: "{name}-{version}"
+        star: "{name}-{version}"
+        tar-boot: "{name}-{version}"
+        tcc: "{name}-{version}"
+    # shpack's modes: no setgid directories
+    allow_sgid: false
+    installer: new
+    sandbox:
+      enable: true
+      # what shpack's sandbox (bootstrap/sandbox-1.0) grants every build too, so
+      # that configure tests (a strncmp probe maps /dev/zero) come out the same
+      allow_read: [/proc]
+      allow_write: [/dev]
+  concretizer:
+    # shpack builds several versions of musl, gawk, xz, ... into one DAG
+    duplicates:
+      strategy: minimal
+      max_dupes:
+        default: 4

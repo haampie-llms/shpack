@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""bzip2 1.0.8, as the kaem phase builds it (shpack/bootstrap/bzip2-1.0.8), with tcc 0.9.27
-and musl and the kaem-phase tools before it, all in one prefix
-($STORE/bzip2-boot-1.0.8). kaem-steps names the step: shpack takes it as installed by
-the kaem phase, and Spack's star-recipes adapter runs the step's kaem.run.
-No other phase applies."""
+"""bzip2 1.0.8, as the kaem phase builds it (shpack/bootstrap/bzip2-1.0.8), with
+tcc 0.9.27, musl and the kaem-phase tools before it, into the unhashed
+$STORE/bzip2-boot-1.0.8. kaem-steps names the step and what it reads: shpack
+takes the package as installed by the kaem phase, and Spack's star-recipes
+adapter runs the step's kaem.run. No other phase applies."""
 
 homepage = "https://sourceware.org/bzip2/"
 license("bzip2-1.0.6")
