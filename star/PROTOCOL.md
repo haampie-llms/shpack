@@ -33,8 +33,7 @@ license("GPL-3.0-or-later")
 
 version("4.4.1", sha256 = "dd16...", url = "https://.../make-4.4.1.tar.gz")
 build_system("autotools")
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 parallel = False
 ```
 

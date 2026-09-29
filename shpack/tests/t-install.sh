@@ -66,7 +66,7 @@ assert_file "$tprefix/share/hello.txt"
 # metadata as Spack keeps it, in .spack/
 assert_file "$tprefix/.spack/spec.json"
 assert_file "$tprefix/.spack/shpack-manifest"
-assert_file "$tprefix/.spack/repos/shpack/packages/tarpkg/package.star"
+assert_file "$tprefix/.spack/repos/bootstrap/packages/tarpkg/package.star"
 assert_file "$tprefix/.spack/shpack-build.sh"
 assert_file "$tprefix/.spack/spack-build-out.txt"
 assert_contains "$tprefix/.spack/spec.json" '"name": "tarpkg"'
@@ -109,7 +109,7 @@ assert tar["installed"] and tar["explicit"], tar
 assert tar["path"] == sys.argv[3] == "%s/linux-testarch/tarpkg-1.0-%s" % (sys.argv[2], h), tar["path"]
 assert len(h) == 32 and tar["spec"]["hash"] == h
 deps = {d["name"]: d for d in tar["spec"]["dependencies"]}
-assert deps["liba"]["hash"] == recs["liba"][0] and deps["liba"]["parameters"]["deptypes"] == ["build", "link"]
+assert deps["liba"]["hash"] == recs["liba"][0] and deps["liba"]["parameters"]["deptypes"] == ["build"]
 assert not recs["liba"][1]["explicit"] and recs["liba"][1]["ref_count"] >= 1
 assert recs["dash"][1]["spec"]["external"]["path"], recs["dash"]
 for h, r in db["installs"].items():

@@ -34,7 +34,7 @@ depends_on("tar@1.35-musl", type = "build")
 depends_on("xz@5.2.5-musl", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("sed@4.9-musl", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 # GCC 9.5's download_prerequisites set, in-tree as gmp/ mpfr/ mpc/ for
 # auto-detection. ISL omitted (Graphite only; --without-isl).

@@ -11828,215 +11828,215 @@ void main
     int argc argc =:
     __init_globals__ ()
     _sys_env argv ? argc ? 8 * 8 + + = ;
-# tcc_cc.c 4879
-    include_path 100 malloc () = ;
 # tcc_cc.c 4881
+    include_path 4096 malloc () = ;
+# tcc_cc.c 4883
     "__TCC_CC__" 1 get_env () ;
     int init init 0 =1 ;
 
-# tcc_cc.c 4884
+# tcc_cc.c 4886
     fcode stdout ? = ;
     int only_preprocess only_preprocess 0 =1 ;
 
     int target_arch target_arch 0 = ;
 
-# tcc_cc.c 4888
+# tcc_cc.c 4890
     {
         int i i 1 =4 ;
 
         do
         {
             i ?4 long argc ?4 long <s ! if { break }
-# tcc_cc.c 4889
+# tcc_cc.c 4891
             argv ? i ?4 long 8 * + ? "-E" strcmp () 0 == if
             {
-# tcc_cc.c 4890
+# tcc_cc.c 4892
                 only_preprocess 1 char =1 ;
             }
             else
             {
-# tcc_cc.c 4891
+# tcc_cc.c 4893
                 argv ? i ?4 long 8 * + ? "-64" strcmp () 0 == if
                 {
-# tcc_cc.c 4892
+# tcc_cc.c 4894
                     long_long_size 8 long =4 ;
                 }
                 else
                 {
-# tcc_cc.c 4893
+# tcc_cc.c 4895
                     i ?4 long 1 + long argc ?4 long <s && { argv ? i ?4 long 8 * + ? "-a" strcmp () 0 == } if
                     {
-# tcc_cc.c 4894
-# tcc_cc.c 4895
-                        i $ ?4 long 1 + long =4 1 - long ;
 # tcc_cc.c 4896
-                        target_arch argv ? i ?4 long 8 * + ? = ;
 # tcc_cc.c 4897
+                        i $ ?4 long 1 + long =4 1 - long ;
+# tcc_cc.c 4898
+                        target_arch argv ? i ?4 long 8 * + ? = ;
+# tcc_cc.c 4899
                         argv ? i ?4 long 8 * + ? "x86" strcmp () 0 != if
                         {
-# tcc_cc.c 4898
+# tcc_cc.c 4900
                             long_long_size 8 long =4 ;
                         }
                     }
                     else
                     {
-# tcc_cc.c 4900
+# tcc_cc.c 4902
                         argv ? i ?4 long 8 * + ? "-T" strcmp () 0 == if
                         {
-# tcc_cc.c 4901
+# tcc_cc.c 4903
                             add_tracing 1 char =1 ;
                         }
                         else
                         {
-# tcc_cc.c 4902
+# tcc_cc.c 4904
                             argv ? i ?4 long 8 * + ? "-dp" strcmp () 0 == if
                             {
-# tcc_cc.c 4903
+# tcc_cc.c 4905
                                 opt_trace_parser 1 char =1 ;
                             }
                             else
                             {
-# tcc_cc.c 4904
+# tcc_cc.c 4906
                                 argv ? i ?4 long 8 * + ? "-D" strcmp () 0 == && { i ?4 long 1 + long argc ?4 long <s } if
                                 {
-# tcc_cc.c 4905
-# tcc_cc.c 4906
+# tcc_cc.c 4907
+# tcc_cc.c 4908
                                     i $ ?4 long 1 + long =4 1 - long ;
                                     int s s argv ? i ?4 long 8 * + ? = ;
 
                                     int 13 name
                                     int j j 0 =4 ;
 
-# tcc_cc.c 4910
+# tcc_cc.c 4912
                                     {
                                         do
                                         {
                                             s ? ?1 char 0 char != && { s ? ?1 char 61 char != } ! if { break }
-# tcc_cc.c 4911
+# tcc_cc.c 4913
                                             j ?4 long 99 <s if
                                             {
-# tcc_cc.c 4912
+# tcc_cc.c 4914
                                                 name j $ ?4 long 1 + long =4 1 - long + s ? ?1 char char =1 ;
                                             }
                                             s $ ? 1 + = 1 - ;
                                         }
                                     }
-# tcc_cc.c 4913
+# tcc_cc.c 4915
                                     name j ?4 long + 0 char char =1 ;
                                     int env env name 1 get_env () = ;
 
-# tcc_cc.c 4915
+# tcc_cc.c 4917
                                     s ? ?1 char 61 char == if
                                     {
-# tcc_cc.c 4916
-# tcc_cc.c 4917
+# tcc_cc.c 4918
+# tcc_cc.c 4919
                                         s $ ? 1 + = 1 - ;
                                         int 25 value
-# tcc_cc.c 4919
+# tcc_cc.c 4921
                                         j 0 long =4 ;
-# tcc_cc.c 4920
+# tcc_cc.c 4922
                                         s ? ?1 char 34 char == if
                                         {
-# tcc_cc.c 4921
-# tcc_cc.c 4922
-                                            s $ ? 1 + = 1 - ;
 # tcc_cc.c 4923
+# tcc_cc.c 4924
+                                            s $ ? 1 + = 1 - ;
+# tcc_cc.c 4925
                                             {
                                                 do
                                                 {
                                                     s ? ?1 char 34 char != && { s ? ?1 char 0 char != } ! if { break }
-# tcc_cc.c 4924
+# tcc_cc.c 4926
                                                     j ?4 long 199 <s if
                                                     {
-# tcc_cc.c 4925
+# tcc_cc.c 4927
                                                         value j $ ?4 long 1 + long =4 1 - long + s ? ?1 char char =1 ;
                                                     }
                                                     s $ ? 1 + = 1 - ;
                                                 }
                                             }
-# tcc_cc.c 4926
+# tcc_cc.c 4928
                                             value j ?4 long + 0 char char =1 ;
-# tcc_cc.c 4927
+# tcc_cc.c 4929
                                             env ->s14_m_tokens value new_str_token () = ;
                                         }
                                         else
                                         {
-# tcc_cc.c 4930
-# tcc_cc.c 4931
+# tcc_cc.c 4932
+# tcc_cc.c 4933
                                             {
                                                 do
                                                 {
                                                     48 char s ? ?1 char <=s && { s ? ?1 char 57 char <=s } ! if { break }
-# tcc_cc.c 4932
+# tcc_cc.c 4934
                                                     j ?4 long 199 <s if
                                                     {
-# tcc_cc.c 4933
+# tcc_cc.c 4935
                                                         value j $ ?4 long 1 + long =4 1 - long + s ? ?1 char char =1 ;
                                                     }
                                                     s $ ? 1 + = 1 - ;
                                                 }
                                             }
-# tcc_cc.c 4934
+# tcc_cc.c 4936
                                             value j ?4 long + 0 char char =1 ;
-# tcc_cc.c 4935
+# tcc_cc.c 4937
                                             env ->s14_m_tokens value new_int_token () = ;
                                         }
                                     }
                                 }
                                 else
                                 {
-# tcc_cc.c 4939
+# tcc_cc.c 4941
                                     i ?4 long 1 + long argc ?4 long <s && { argv ? i ?4 long 8 * + ? "-o" strcmp () 0 == } if
                                     {
-# tcc_cc.c 4940
-# tcc_cc.c 4941
-                                        fcode argv ? i $ ?4 long 1 + long =4 8 * + ? "w" fopen () = ;
 # tcc_cc.c 4942
+# tcc_cc.c 4943
+                                        fcode argv ? i $ ?4 long 1 + long =4 8 * + ? "w" fopen () = ;
+# tcc_cc.c 4944
                                         fcode ? 0 == if
                                         {
-# tcc_cc.c 4943
-# tcc_cc.c 4944
-                                            stderr ? "ERROR: Cannot open file '%s' for writing\n" { int 1 __var_args __var_args argv ? i ?4 long 8 * + ? = ; __var_args fprintf () } ;
 # tcc_cc.c 4945
+# tcc_cc.c 4946
+                                            stderr ? "ERROR: Cannot open file '%s' for writing\n" { int 1 __var_args __var_args argv ? i ?4 long 8 * + ? = ; __var_args fprintf () } ;
+# tcc_cc.c 4947
                                             1 return
                                         }
                                     }
                                     else
                                     {
-# tcc_cc.c 4949
-# tcc_cc.c 4950
-                                        init ?1 char ! if
-                                        {
 # tcc_cc.c 4951
 # tcc_cc.c 4952
-                                            define_base_types () ;
+                                        init ?1 char ! if
+                                        {
 # tcc_cc.c 4953
-                                            add_predefined_types () ;
 # tcc_cc.c 4954
+                                            define_base_types () ;
+# tcc_cc.c 4955
+                                            add_predefined_types () ;
+# tcc_cc.c 4956
                                             long_long_size ?4 long 4 == if
                                             {
-# tcc_cc.c 4955
+# tcc_cc.c 4957
                                                 "__TCC_CC_32__" 1 get_env () ;
                                             }
-# tcc_cc.c 4957
+# tcc_cc.c 4959
                                             target_arch ? 0 != && { target_arch ? "aarch64" strcmp () 0 == } if
                                             {
-# tcc_cc.c 4958
+# tcc_cc.c 4960
                                                 "TCC_TARGET_ARM64" 1 get_env () ;
                                             }
-# tcc_cc.c 4959
+# tcc_cc.c 4961
                                             target_arch ? 0 != && { target_arch ? "riscv64" strcmp () 0 == } if
                                             {
-# tcc_cc.c 4960
+# tcc_cc.c 4962
                                                 "TCC_TARGET_RISCV64" 1 get_env () ;
                                             }
-# tcc_cc.c 4961
+# tcc_cc.c 4963
                                             init 1 char =1 ;
                                         }
-# tcc_cc.c 4964
+# tcc_cc.c 4966
                                         argv ? i ?4 long 8 * + ? only_preprocess ?1 char parse_file () ! if
                                         {
-# tcc_cc.c 4965
+# tcc_cc.c 4967
                                             1 return
                                         }
                                     }
@@ -12049,21 +12049,21 @@ void main
             i $ ?4 long 1 + long =4 1 - long ;
         }
     }
-# tcc_cc.c 4968
+# tcc_cc.c 4970
     has_error ?1 char if
     {
-# tcc_cc.c 4969
+# tcc_cc.c 4971
         4294967295 long return
     }
-# tcc_cc.c 4971
+# tcc_cc.c 4973
     only_preprocess ?1 char if
     {
-# tcc_cc.c 4972
+# tcc_cc.c 4974
         0 return
     }
-# tcc_cc.c 4974
-    gen_init_globals () ;
 # tcc_cc.c 4976
+    gen_init_globals () ;
+# tcc_cc.c 4978
     0 return
 	0 return
 }

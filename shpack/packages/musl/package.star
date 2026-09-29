@@ -27,7 +27,7 @@ depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
 depends_on("sed@4.9-musl", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def setup_build_environment(ctx):
     # musl builds -nostdinc but still needs the kernel uapi (asm/ syscall and

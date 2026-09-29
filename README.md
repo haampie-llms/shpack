@@ -88,10 +88,10 @@ time -- store and state are shared on disk.
 pzr5lqm  [b   ]    gcc-boot-wrapper@16.1.0
 xhecsx6  [b r ]      gcc-boot2@16.1.0
 6elkxfh  [b   ]        gmake@4.4.1
-avjqpsa  [b   ]          tcc@0.9.27 (external)
-twm6xh5  [bl  ]          musl@1.1.24 (external)
+avjqpsa  [bl  ]          tcc@0.9.27
 rgir4f4  [b   ]          grep-boot@2.4
-egnjari  [b   ]            dash@0.5.12 (external)
+egnjari  [b   ]            dash-boot@0.5.12
+...
 h6rz6lz  [b   ]          gawk-boot@3.0.4
 3zx5q53  [b   ]        diffutils@2.7
 y657jx4  [b   ]        findutils@4.2.33
@@ -114,7 +114,7 @@ d4senl5  [b   ]        python@3.8.20
 u64baoj  [b   ]        bison@3.8.2
 7gv2qwp  [b   ]        dash@0.5.13.4
 fbazrop  [bl  ]          glibc@2.43-boot
-f7yhxh6  [b   ]          dash-boot@0.5.12 (external)
+f7yhxh6  [b   ]          dash-boot@0.5.12
 k3bqbga  [b r ]    binutils@2.46.0
 k3lar2d  [bl  ]      libstdcxx-boot1@16.1.0
 o5c4buc  [bl  ]      zlib-ng@2.3.3-boot
@@ -122,9 +122,10 @@ c7xtxe4  [bl  ]      zstd@1.5.7-boot
 ```
 
 The column in brackets is the type of the dependency edge, as `spack spec -t`
-prints it: `b`uild, `l`ink, `r`un. The `(external)` nodes are part of the
-initial bootstrapping phase. All installed
-packages are put into unique prefixes `$STORE/<name>-<version>[-<hash>]`.
+prints it: `b`uild, `l`ink, `r`un. tcc, dash-boot and the other nodes below
+glibc's tools that the kaem phase installs are unhashed, at
+`$STORE/<name>-<version>`; every other package gets its own prefix
+`$STORE/linux-<target>/<name>-<version>-<hash>`.
 
 ### `shpack install spack`
 
@@ -180,14 +181,13 @@ system, and phase functions return the actions that build the package:
 license("GPL-3.0-or-later")
 version("2.30", sha256 = "8c38...", url = "https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.gz")
 build_system("autotools")
-depends_on("tcc", type = "build")
-depends_on("musl")
+depends_on("tcc", type = ("build", "link"))
 depends_on("gmake@4.4.1", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 patch("arm64-elfnn-howto.patch", when = "target=aarch64:")
 
 def configure_args(ctx):
-    return ["--with-sysroot=" + ctx.dep("musl").prefix, "--disable-nls"]
+    return ["--with-sysroot=" + ctx.dep("tcc").prefix, "--disable-nls"]
 ```
 
 The directives are Spack's, with Spack's signatures; the docstring is the
@@ -254,10 +254,12 @@ and the externals to the state files and `dag.mk`, in the spirit of Spack's
 old greedy concretizer rather than its solver. `shpack install <name>` resolves names to concrete versions (the first version
 a recipe declares wins; `name@version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
-DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
-auxiliary files, the build-system modules it loads, the evaluator version,
-source checksums, target arch, and the hashes and types of all direct dependencies. Anything changing anywhere in a package's closure changes its
-hash.
+DAG, and assigns every node a Merkle hash: Spack's DAG hash of the node as
+Spack records it, whose package hash covers the recipe text, auxiliary files,
+the build-system modules it loads, the evaluator version, source checksums and
+target arch, and which holds the hashes of all direct dependencies. Anything
+changing anywhere in a package's closure changes its hash, and a Spack with
+this repository computes the same one (star/SPACK.md).
 
 The store is a Spack install tree. Every package installs where Spack would
 put it, `$STORE/linux-<target>/<name>-<version>-<hash>` (the hash in Spack's
@@ -275,13 +277,38 @@ $ spack find -l
 4cxpi2c gcc@16.1.0  ...
 ```
 
-With `shpack/` as a Spack repository (`repo.yaml`, and the `star-recipes`
-branch of Spack for `package.star`), Spack can also rebuild a node in place
-(`spack install --overwrite /4cxpi2c`); shpack then treats the prefix as
-installed, and keeps Spack's record. Packages the kaem phase already installed (unhashed
-`$STORE/<name>-<version>` prefixes) are registered in `etc/externals`,
-Spack-`packages.yaml`-style; they resolve like any other candidate and
-contribute their identity to dependents' hashes.
+`shpack/` is also a Spack package repository, namespace `bootstrap`
+(`repo.yaml`; the `star-recipes` branch of Spack reads `package.star`), and
+shpack records its installs under that namespace. With it registered, Spack
+reuses them:
+
+```console
+$ spack repo add --name bootstrap $PWD/shpack
+$ spack spec -l gcc-boot0
+[+]  f7v3s67  gcc-boot0@4.7-2013.11 build_system=generic platform=linux os=shpack target=aarch64
+[+]  jli4iow      ^binutils-boot0@2.30-musl build_system=generic ...
+```
+
+Spack can also rebuild a node in place (`spack install --overwrite /4cxpi2c`);
+shpack then treats the prefix as installed, and keeps Spack's record.
+
+The kaem phase's packages are recipes too: the seed is `tcc@0.9.27` (tcc and
+musl in one prefix, with the tools they were grown with), and the base is
+`gmake-boot@3.82`, `sed-boot@4.0.9`, ..., `dash-boot@0.5.12`. Each lists its
+step in `kaem-steps` (`VERSION STEP INPUT...`: the version, the
+`shpack/bootstrap/` step that builds it, and the tree paths it reads, which
+its package hash covers). They install unhashed at `$STORE/<name>-<version>`.
+shpack takes them as installed by the kaem phase and only records them; Spack
+builds them itself, the seed by the stage0 seed (`COMMAND=seed`) and every
+other step by its `kaem.run`. The tree is a Spack environment (`spack.yaml`:
+this repository, those prefixes, and Spack's Landlock build sandbox), so
+
+```console
+$ spack -e . install --add gcc-boot0
+```
+
+builds the same DAG from the same stage0 seed into an empty store, each build
+sandboxed, and gives the same prefixes, byte for byte (star/SPACK.md).
 
 ## Scheduling
 

@@ -189,10 +189,12 @@ assert_contains "$TESTDIR/env.tl" "/bh-1.0-"
 if grep -q "/rt-1.0-" "$TESTDIR/env.tl"; then
     fail "rt (run only) must not be on tl's own build PATH"
 fi
-# Everything is still built first, and the types are part of the hash.
+# Everything is still built first, and the types are part of the hash: the
+# recipe's in its package text, while the node records every edge as Spack's
+# adapter declares it, a build edge to the dependency's hash.
 assert_contains "$SHPACK_VAR/dag.mk" "build-one lk2-1.0"
-assert_contains "$SHPACK_VAR/spec/top-1.0/manifest" "dep tl 1.0 $(index_field tl 3) build"
-assert_contains "$SHPACK_VAR/spec/top-1.0/manifest" "dep lk2 1.0 $(index_field lk2 3) link"
+assert_contains "$SHPACK_VAR/spec/top-1.0/edges" "lk2-1.0 link"
+assert_contains "$SHPACK_VAR/spec/top-1.0/spack.json" "\"name\": \"lk2\", \"hash\": \"$(index_field lk2 3)"
 h=$(index_field top 3)
 sed 's/type = ("link",)/type = ("build", "link")/' "$SHPACK_REPO/top/package.star" > "$TESTDIR/top.star"
 cp "$TESTDIR/top.star" "$SHPACK_REPO/top/package.star"

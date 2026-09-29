@@ -50,5 +50,5 @@ cd "$ROOT/seed"
 # from it the way the driver does.
 STORE=
 [ -f "$ROOT/shpack.conf" ] && . "$ROOT/shpack.conf"
-[ -x "${STORE:-$ROOT/store}/dash-0.5.12/bin/sh" ] \
-    || die "bootstrap failed: no ${STORE:-$ROOT/store}/dash-0.5.12/bin/sh (see the output above)"
+[ -x "${STORE:-$ROOT/store}/dash-boot-0.5.12/bin/sh" ] \
+    || die "bootstrap failed: no ${STORE:-$ROOT/store}/dash-boot-0.5.12/bin/sh (see the output above)"

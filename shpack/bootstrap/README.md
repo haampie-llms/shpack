@@ -20,7 +20,7 @@ on `start.<arch>.kaem`, a three-line file naming `ARCH`/`ARCH_DIR` that
 3. installs the stage0 tools into per-package store prefixes, grows `stack_c`
    and `tcc_cc` (`check-tools.kaem` verifies the latter reproduces its seed);
 4. runs the chain, one child kaem per `<name-version>/kaem.run`;
-5. `exec`s `${STORE}/dash-0.5.12/bin/sh shpack/bin/shpack ${COMMAND} ${SPEC}`
+5. `exec`s `${STORE}/dash-boot-0.5.12/bin/sh shpack/bin/shpack ${COMMAND} ${SPEC}`
    with the configuration in the environment.
 
 Nothing is generated on the host and no token is substituted: what a script
@@ -28,9 +28,16 @@ needs it takes from kaem variables.
 
 ## Conventions
 
-One directory per package, named `<name>-<version>` to match its store
-prefix `${STORE}/<name>-<version>` (the kaem phase cannot compute spec hashes;
-these prefixes are registered as shpack *externals* in `etc/externals`).
+One directory per step, `<name>-<version>` of the upstream package. Each step
+is the build of a package recipe that lists it in its `kaem-steps`
+(`shpack/packages/<name>/kaem-steps`), and installs at that recipe's unhashed
+prefix `${STORE}/<name>-<version>` (make-3.82 is `gmake-boot@3.82`, so
+`${STORE}/gmake-boot-3.82`). The seed steps (simple-patch, tcc, musl) are one
+package, `tcc@0.9.27`, at `${SEED}=${STORE}/tcc-0.9.27`: musl and tcc 0.9.27
+are the prefix itself, the earlier steps sub-prefixes of it, and `seed.path`
+is what the seed puts on the PATH of the steps after it. shpack registers these
+prefixes (`shpack register-one`) instead of building them; Spack's star-recipes
+adapter builds them by these same scripts.
 
 Each directory holds:
 
@@ -41,9 +48,7 @@ Each directory holds:
   upstream tarball(s); `kaem.run` checks them first thing after `cd ${DISTFILES}`.
 - package assets (`files/`, `patches/`, `mk/`, `simple-patches/`, the musl
   per-arch trees, ...) referenced as `${PKG}/...`. Some makefiles and patches
-  originate from live-bootstrap. A store path a fragment needs at build time
-  (`musl-1.1.24/shpack-shell/*.after`) is carried as a `@STORE@` token and
-  instantiated in-chain with mescc-tools-extra `replace`.
+  originate from live-bootstrap.
 
 Environment contract (set in `start.kaem`, inherited by every `kaem.run`):
 
@@ -70,9 +75,9 @@ rationale lives in the comments of each script.
 
 ## Why this is not under `shpack/packages/`
 
-shpack hashes a recipe directory's full contents into the spec hash of that
-package (and, Merkle-style, of everything depending on it). Kaem-phase
-assets are not inputs to the shell-phase recipes, so keeping them here
-avoids a kaem.run comment edit rebuilding the entire gcc closure. The
-shell-phase handoff sees these packages only as externals with fixed
-prefixes.
+The kaem phase runs before there is a shell or star, so its steps are kaem
+scripts with the environment contract above, not recipes. The recipes that
+name them (`kaem-steps`) hash each step's directory as an input, so a
+`kaem.run` edit, even of a comment, changes the hashes of everything built on
+it: the seed's inputs are `seed/`, `vendor/` and its steps, minus stage0's own
+outputs.

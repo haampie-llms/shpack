@@ -1,0 +1,1 @@
+0.9.27 seed seed vendor shpack/bootstrap/start.kaem shpack/bootstrap/start.aarch64.kaem shpack/bootstrap/start.amd64.kaem shpack/bootstrap/check-tools.kaem shpack/bootstrap/seed.path shpack/bootstrap/simple-patch-1.0 shpack/bootstrap/tcc-0.9.26 shpack/bootstrap/musl-1.1.24 shpack/bootstrap/tcc-0.9.27 !seed/AArch64/bin !seed/AArch64/artifact !seed/AMD64/bin !seed/AMD64/artifact

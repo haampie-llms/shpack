@@ -11,3 +11,7 @@
 
 # stage0-posix's own build outputs under seed/ are covered by the .gitignore
 # files it ships (seed/*/bin, seed/*/artifact).
+
+# a Spack environment of the tree (spack -e .): its lock and state
+/spack.lock
+/.spack-env/

@@ -192,30 +192,77 @@ do_patch() {
     done < "$SPEC/patches"
 }
 
-do_finalize() {
-    # Metadata as Spack keeps it, in .spack/: the recipe directory under
-    # repos/<namespace>/packages/, and shpack's own hash input and plan (the
-    # build log is copied in by dag.mk, as spack-build-out.txt).
-    mkdir -p "$PREFIX/.spack/repos/shpack/packages"
-    cp -R "$package_dir" "$PREFIX/.spack/repos/shpack/packages/$name"
+# protocol_env -- a plan sees the environment star/PROTOCOL.md defines, and
+# nothing of shpack's own (ROOT, STORE, SHPACK_*, ...: a Makefile reads its
+# environment): everything else is un-exported, kept as a shell variable for
+# the builder's helpers. Another host (Spack's adapter) builds the same one.
+protocol_env() {
+    local line name val
+    export -p > "$VAR/exports.$$"
+    while read -r line; do
+        case $line in
+            "export "*) ;;
+            *) continue ;;   # the rest of a multi-line value
+        esac
+        name=${line#export }
+        name=${name%%=*}
+        case $name in
+            PATH|PWD|CONFIG_SHELL|HOME|TMPDIR|TERM|PREFIX|ARCH|JOBS|makejobs|sh|SHELL|\
+            MAKEFLAGS|MFLAGS|MAKELEVEL|SOURCE_DATE_EPOCH|PKG_CONFIG_PATH|\
+            SHPACK_INCLUDE_DIRS|SHPACK_LINK_DIRS|SHPACK_RPATH_DIRS|SHPACK_FILE_PREFIX_MAP) ;;
+            *[!A-Za-z0-9_]*|'') ;;
+            *) eval "val=\${$name}"; unset "$name"; eval "$name=\$val" ;;
+        esac
+    done < "$VAR/exports.$$"
+    rm -f "$VAR/exports.$$"
+}
+
+# write_metadata -- the end of every install, built or registered. Metadata
+# as Spack keeps it, in .spack/: the recipe directory under
+# repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's) and shpack's own
+# hash input (a build's plan and log are copied in before this). Then modes:
+# they are part of what an install produces, so fix them rather than inherit
+# the umask and whatever the tarballs carried (the mescc-tools cp makes 0600
+# files): directories 755, files 644, or 755 if executable at all (Spack's
+# default install permissions too). .spack/spec.json last: it marks the
+# prefix installed, for shpack and Spack alike.
+write_metadata() {
+    mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
+    rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
+    cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
     cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
+    chmod -R u=rwX,go=rX "$PREFIX"
+    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+}
+
+do_finalize() {
+    # The plan (the build log is copied in by dag.mk, as spack-build-out.txt).
+    mkdir -p "$PREFIX/.spack"
     cp "$SPEC/build.sh" "$PREFIX/.spack/shpack-build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
     # world links via libtool, and they bake build-time paths / dependency
     # orderings that differ across builds. A glob, not find -- shpack core has no
     # find; these always land directly in lib/ (and lib64/).
     rm -f "$PREFIX"/lib/*.la "$PREFIX"/lib64/*.la
-    # Modes are part of what a build produces, so fix them rather than inherit
-    # the umask and whatever the tarballs carried: directories 755, files 644,
-    # or 755 if executable at all (Spack's default install permissions too).
-    chmod -R u=rwX,go=rX "$PREFIX"
-    # .spack/spec.json last: it marks the prefix installed, for shpack and
-    # Spack alike. The time goes to the database (lib/spackdb.star).
-    date +%s > "$SPEC/installation_time"
-    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+    write_metadata
     cd /
     # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
     [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
+}
+
+# cmd_register_one -- a node the kaem phase installed (its recipe's
+# kaem-steps): the prefix is there, so it only gets its metadata, as a build's
+# finalize writes it.
+cmd_register_one() {
+    if [ $# -ne 1 ]; then die "usage: shpack register-one <id>"; fi
+    id=$1
+    SPEC=$VAR/spec/$id
+    [ "$(cat "$SPEC/kind")" = kaem ] || die "node '$id' is not the kaem phase's"
+    name=$(cat "$SPEC/name")
+    PREFIX=$(cat "$SPEC/prefix")
+    [ -d "$PREFIX" ] || die "$id: the kaem phase did not install $PREFIX"
+    write_metadata
+    echo "==> $id: registered $PREFIX"
 }
 
 cmd_build_one() {
@@ -223,7 +270,7 @@ cmd_build_one() {
     id=$1
     SPEC=$VAR/spec/$id
     [ -f "$SPEC/kind" ] || die "unknown node '$id' (run shpack concretize)"
-    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is external"
+    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is not built by shpack (external or kaem)"
     name=$(cat "$SPEC/name")
     version=$(cat "$SPEC/version")
     hash=$(cat "$SPEC/hash")
@@ -248,18 +295,16 @@ cmd_build_one() {
     BUILD_HOME=$VAR/home
     mkdir -p "$BUILD_HOME"
     # $sh, the build shell (configure/patch-shebangs/ctx.sh/SHELL=), is
-    # the dash the recipe declares -- dash@0.5.12 (bootstrap external) below the
+    # the dash the recipe declares -- dash-boot (the kaem phase's) below the
     # glibc dash, the clean dash above it. Every built recipe must declare one:
     # the build always runs make/patch-shebangs, so there is no shell-free build,
     # and an explicit dep keeps the shell inside the node's recorded closure.
-    # (The dash recipe itself takes its shell from dash-boot, the same
-    # bootstrap dash under a name of its own.)
     if direct_dep dash; then
         sh=$(prefix_of dash)/bin/sh
     elif direct_dep dash-boot; then
         sh=$(prefix_of dash-boot)/bin/sh
     else
-        die "$name declares no shell dependency (add depends_on(\"dash\") or \"dash@0.5.12\")"
+        die "$name declares no shell dependency (add depends_on(\"dash\") or \"dash-boot\")"
     fi
     SHELL=$sh
     # SHELL via MAKEFLAGS so it reaches recursive sub-makes and overrides even a
@@ -339,6 +384,7 @@ cmd_build_one() {
     "$STAR" plan --repo "$REPO" --root "$STAR_ROOT" --ctx "$SPEC/ctx.star" \
         "$name" > "$SPEC/build.sh" || die "$name: star plan failed"
     mkdir -p "$PREFIX"
+    protocol_env
     # The environment the plan runs in, for the record (and for other hosts
     # of the same recipe to compare against).
     export -p > "$SPEC/env"

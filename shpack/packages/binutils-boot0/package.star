@@ -18,14 +18,13 @@ version(
 build_system("autotools")
 
 # tcc + kaem-external musl 1.1.24 + m4; seed make/sed/tar suffice.
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 depends_on("gmake", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("m4", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 # The HOWTO table in bfd/elfnn-aarch64.c has #if/#else inside macro arguments,
 # which tcc 0.9.26's preprocessor lineage cannot handle.
@@ -60,7 +59,7 @@ def configure_args(ctx):
         "AR=tcc -ar",
         "RANLIB=true",
         "CFLAGS=-O2",
-        "--with-sysroot=" + ctx.dep("musl").prefix,
+        "--with-sysroot=" + ctx.dep("tcc").prefix,
         "--disable-dependency-tracking",
         "--disable-plugins",
         "--enable-static",

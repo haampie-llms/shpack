@@ -1245,12 +1245,53 @@ static void emit_shpack(void)
     close_out(f);
 }
 
+/* json_py: emit what Python's json.dumps(v, separators=(",", ":"),
+ * ensure_ascii=True) does, byte for byte (Spack hashes that text): no spaces,
+ * \b and \f escapes, and anything outside ' '..'~' as \uXXXX (UTF-16). */
+static int json_py;
+
+static void json_py_char(Buf *b, const unsigned char *s, int n, int *i)
+{
+    unsigned c = s[*i], cp;
+    int more, k;
+    if (c < 0x80) {
+        switch (c) {
+        case '"': buf_puts(b, "\\\""); return;
+        case '\\': buf_puts(b, "\\\\"); return;
+        case '\n': buf_puts(b, "\\n"); return;
+        case '\t': buf_puts(b, "\\t"); return;
+        case '\r': buf_puts(b, "\\r"); return;
+        case '\b': buf_puts(b, "\\b"); return;
+        case '\f': buf_puts(b, "\\f"); return;
+        }
+        if (c < 0x20 || c == 0x7f)
+            buf_printf(b, "\\u%04x", c);
+        else
+            buf_putc(b, (char)c);
+        return;
+    }
+    more = c >= 0xf0 ? 3 : c >= 0xe0 ? 2 : 1;
+    cp = c & (0x3f >> more);
+    for (k = 0; k < more && *i + 1 < n; k++)
+        cp = cp << 6 | (s[++*i] & 0x3f);
+    if (cp >= 0x10000) {
+        cp -= 0x10000;
+        buf_printf(b, "\\u%04x\\u%04x", 0xd800 | cp >> 10, 0xdc00 | (cp & 0x3ff));
+    } else {
+        buf_printf(b, "\\u%04x", cp);
+    }
+}
+
 static void json_str(Buf *b, const char *s, int n)
 {
     int i;
     buf_putc(b, '"');
     for (i = 0; i < n; i++) {
         unsigned char c = (unsigned char)s[i];
+        if (json_py) {
+            json_py_char(b, (const unsigned char *)s, n, &i);
+            continue;
+        }
         switch (c) {
         case '"': buf_puts(b, "\\\""); break;
         case '\\': buf_puts(b, "\\\\"); break;
@@ -1280,7 +1321,7 @@ static void json_value(Buf *b, V v)
         buf_putc(b, '[');
         for (i = 0; i < AS_LIST(l)->len; i++) {
             if (i)
-                buf_puts(b, ", ");
+                buf_puts(b, json_py ? "," : ", ");
             json_value(b, AS_LIST(l)->items[i]);
         }
         buf_putc(b, ']');
@@ -1296,10 +1337,10 @@ static void json_value(Buf *b, V v)
             if (TYPE(d->ents[i].key) != T_STRING)
                 star_error("json: dict keys must be strings");
             if (!first)
-                buf_puts(b, ", ");
+                buf_puts(b, json_py ? "," : ", ");
             first = 0;
             json_value(b, d->ents[i].key);
-            buf_puts(b, ": ");
+            buf_puts(b, json_py ? ":" : ": ");
             json_value(b, d->ents[i].val);
         }
         buf_putc(b, '}');
@@ -1310,9 +1351,9 @@ static void json_value(Buf *b, V v)
         buf_putc(b, '{');
         for (i = 0; i < s->n; i++) {
             if (i)
-                buf_puts(b, ", ");
+                buf_puts(b, json_py ? "," : ", ");
             json_str(b, s->names[i]->s, s->names[i]->len);
-            buf_puts(b, ": ");
+            buf_puts(b, json_py ? ":" : ": ");
             json_value(b, s->vals[i]);
         }
         buf_putc(b, '}');

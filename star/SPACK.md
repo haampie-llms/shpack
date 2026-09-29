@@ -22,14 +22,77 @@ and both hosts derive a build's environment from them by Spack's rule
 into what Spack would make a single unification set, and duplicates of link
 dependencies are beyond it, under `duplicates: minimal` and `full` alike.
 Declared as build edges, shpack's DAG concretizes (the packages are tagged
-`build-tools`). The adapter keeps the recipe's types (`_star_deps`) for PATH,
+`build-tools`). The adapter keeps the recipe's types (`StarPackage.declared_edges`) for PATH,
 the compiler wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
+
+## Reuse
+
+shpack records its installs (`.spack/spec.json`, `.spack-db`) as Spack
+declares the recipes, so a Spack with this tree registered as the `bootstrap`
+repo reuses them. Three things have to agree:
+- **Edges are `build`.** A reused node's link or run edge would put its
+  target in the root unification set, which only link/run edges of the
+  package graph reach (`possible_in_link_run`); the solve would fail and
+  Spack would rebuild instead.
+- **`build_system` is `generic`.** The adapter declares no build system (the
+  plan carries it), so any other value is not one the package has.
+- **Every node's package exists in the repo.** A node Spack cannot load is
+  not reusable, and neither is anything that depends on it. The kaem phase's
+  packages are recipes (`kaem-steps`), so there are no externals.
+
+## Same hashes
+
+shpack's node hash is Spack's DAG hash (the base32 SHA-1 of the node's JSON as
+`Spec.to_node_dict` makes it), and its package hash is Spack's `content_hash`
+over the adapter's `StarPackage.package_text`: shpack's package text (`package_text` in
+lib/concretize.star), which covers every file in the package directory, the
+sources, the evaluator and every loaded module. Every Starlark package
+requires `os=shpack`, an OS the adapter registers on the host platform, as
+shpack records it. So `spack spec --fresh gcc-boot0` gives shpack's hashes,
+and Spack installs where shpack does.
+
+## The kaem phase
+
+A version listed in its recipe's `kaem-steps` is built by the adapter the way
+shpack's kaem phase builds it (`_kaem_install`): the seed, `tcc@0.9.27`, by the
+stage0 seed itself on a copy of the tree (`COMMAND=seed`), any other step by
+its `kaem.run` under the kaem phase's environment contract, with the step's
+archives unexpanded in a DISTFILES directory and PATH composed as start.kaem
+composes it (the step, the steps before it newest first, `seed.path`). They
+install unhashed, by the `{name}-{version}` projections of the tree's
+`spack.yaml`.
+
+A shell-phase build's base PATH and `CONFIG_SHELL` are the kaem phase's as it
+hands over to shpack: those of its last step (the kaem-phase node in the DAG
+with all the others below it, dash-boot), i.e. the kaem steps' bins newest
+first, then `seed.path`, and dash-boot's `sh`.
+
+## Staging and the sandbox
+
+The tree is a Spack environment (`spack.yaml`): the `bootstrap` repository
+alone, the projections, and the new installer with its Landlock sandbox on.
+
+    spack -e . install --add gcc-boot0
+
+Spack fetches and checks every archive (version and `resource()`, all left
+unexpanded), so mirrors see them. Staging then copies into the stage what the
+build reads, before the sandbox applies: the archives under their names, the
+recipe directory and the modules it loads, a kaem step's inputs, and
+`seed.path`, i.e. what the package hash covers. The build, sandboxed, reads
+only that copy and its dependencies' prefixes, and writes only its stage and
+prefix: it unpacks and patches with the tools on its PATH (no shell), finds
+`patch-shebangs` there, and evaluates the plan from the copied recipe. Spack's
+`get_user()` is memoized, so the stage path resolves once `/etc/passwd` is
+out of reach. `spack install --keep-stage` keeps the stage, with the plan's
+environment in `shpack/env`.
 
 ## Status
 
-Spack built the full gcc 16 DAG (31 packages) from these recipes. It ran with
-shpack's staging and build environment, into a store whose paths have the
-same length as shpack's.
+Up to gcc-boot0 (23 packages, from the stage0 seed), `spack -e . install`
+into an empty store, sandboxed, gives the prefixes the single-execve bootstrap
+gives, byte for byte (`.spack/` aside). Before the hashes were shared, Spack
+built the full gcc 16 DAG (31 packages) from these recipes, into a store whose
+paths had the same length as shpack's:
 
 - **22 of 31 prefixes are byte-identical** to shpack's, including modes, once
   the hashes in store paths are rewritten. These cover the whole tcc/musl
@@ -46,17 +109,14 @@ same length as shpack's.
   aarch64's `MULTILIB_OSDIRNAMES` in one build and not in the other. The
   environments the two hosts construct for this build are identical apart
   from the jobserver fds. Keep both stages (`SHPACK_KEEP_STAGE`,
-  `SPACK_STAR_KEEP_STAGE`) and diff `gcc/Makefile` and `s-mlib`.
+  `spack install --keep-stage`) and diff `gcc/Makefile` and `s-mlib`.
   gcc 16's 45 differences probably follow from this.
-- **gcc-boot0, gcc-boot2.** Only `executable_checksum` in cc1/cc1plus
-  differs; the linked code is identical. One of genchecksum's inputs differs:
-  the objects, the archives, or `checksum-options`.
+- **gcc-boot2.** Only `executable_checksum` in cc1/cc1plus differed (as in
+  gcc-boot0, which is identical since the builds share hashes and prefixes);
+  check again.
 - **python 3.8.** The `_sysconfigdata` `.pyc` files differ; they record
   build-time variables.
 - **glibc, glibc-boot, dash, libstdcxx-boot1.** One to four files each, not
   looked at yet.
-- **Spack.** `resource()` is fetched by the adapter, so `spack mirror`
-  doesn't see resources. Class construction relies on the directive queue
-  (`DirectiveMeta`), an internal. Parity with shpack needs
-  `SPACK_STAR_STAGE_ROOT`, `SPACK_STAR_BASE_ENV` and
-  `SPACK_STAR_PATCH_SHEBANGS`; ordinary use would not.
+- **Spack.** Class construction relies on the directive queue
+  (`DirectiveMeta`), an internal.

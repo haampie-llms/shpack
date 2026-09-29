@@ -51,17 +51,15 @@ untar --non-strict --file musl-1.1.24.tar
 cd musl-1.1.24
 kaem --file ${MSRC}/${ARCH}/apply-full.kaem
 
-# Point musl's system()/popen() at the store dash: the sandbox grants no host
-# /bin/sh, so musl-linked tools that popen (gawk-boot's `print | "cmd"`) must
-# reach the store shell. The committed .after fragments carry a @STORE@ token;
-# instantiate them with the real store path (mescc-tools-extra replace) before
-# patching. Bootstrap-only libc, never relocated, so absolute is fine.
-# packages/musl does the same for 1.2.5; the deliverable glibc keeps /bin/sh.
+# musl's system()/popen() run `sh` from PATH (posix_spawnp), not /bin/sh: the
+# sandbox grants no host /bin/sh, so musl-linked tools that popen (gawk-boot's
+# `print | "cmd"`) must reach the store dash, which every build has on PATH.
+# Not a baked store path: dash is built later with this libc, so its prefix is
+# not known yet (in Spack, where the two are separate packages, not at all).
+# packages/musl bakes the path for 1.2.5; the deliverable glibc keeps /bin/sh.
 SS=${MSRC}/shpack-shell
-replace --file ${SS}/system.c.after --output ${TMPDIR}/system.c.after --match-on @STORE@ --replace-with ${STORE}
-replace --file ${SS}/popen.c.after --output ${TMPDIR}/popen.c.after --match-on @STORE@ --replace-with ${STORE}
-simple-patch src/process/system.c ${SS}/system.c.before ${TMPDIR}/system.c.after
-simple-patch src/stdio/popen.c ${SS}/popen.c.before ${TMPDIR}/popen.c.after
+simple-patch src/process/system.c ${SS}/system.c.before ${SS}/system.c.after
+simple-patch src/stdio/popen.c ${SS}/popen.c.before ${SS}/popen.c.after
 mkdir -p obj/include/bits
 mkdir -p obj/src/internal
 cp ${MSRC}/${ARCH}/generated/bits/alltypes.h obj/include/bits/alltypes.h

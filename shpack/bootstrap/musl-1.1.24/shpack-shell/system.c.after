@@ -1,1 +1,1 @@
-"@STORE@/dash-0.5.12/bin/sh", 0, &attr,
+posix_spawnp(&pid, "sh", 0, &attr,

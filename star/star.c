@@ -17,5 +17,6 @@
 #include "src/regex.c"
 #include "src/host.c"
 #include "src/sha256.c"
+#include "src/sha1.c"
 #include "src/concretize.c"
 #include "src/main.c"

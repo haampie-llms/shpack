@@ -19,11 +19,10 @@ version(
 build_system("makefile")
 
 # tcc + musl 1.1.24, seed make on PATH (no gmake dep).
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 depends_on("grep-boot", type = "build")
 # replace_bin_sh (below) compiles the shell path into the binary.
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def edit(ctx):
     # gawk's system()/getline/print-to-cmd execl a hardcoded "/bin/sh", which the

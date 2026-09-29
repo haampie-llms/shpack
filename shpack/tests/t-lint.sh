@@ -2,7 +2,7 @@
 # Tool-budget lint: shpack core runs under dash + coreutils 5.0 + sed +
 # make 3.82 + the stage0 sha256sum. These commands do not exist at
 # shell-phase start (or are banned for determinism) and must never appear in
-# bin/ or lib/: grep, awk, find, xargs, expr, cut, tac, mktemp.
+# bin/ or lib/: grep, awk, find, xargs, expr, cut, tac, mktemp, date.
 # (This test itself runs on the host, so it may use grep.)
 
 set -e
@@ -13,7 +13,7 @@ for f in bin/shpack lib/*.sh; do
     # Strip comment lines and the usage text (which mentions `find`), then
     # look for the banned words in command-ish positions.
     if sed -e '/^[ \t]*#/d' -e '/^usage() {/,/^}/d' "$f" \
-        | grep -nE '(^|[ \t(|;&!`])(grep|awk|gawk|find|xargs|expr|cut|tac|mktemp)([ \t]|$)'; then
+        | grep -nE '(^|[ \t(|;&!`])(grep|awk|gawk|find|xargs|expr|cut|tac|mktemp|date)([ \t]|$)'; then
         echo "banned command in $f (above)" >&2
         bad=1
     fi
@@ -26,6 +26,10 @@ done
 if [ -n "${STAR:-}" ]; then
     for d in packages/*/; do
         n=${d%/}; n=${n##*/}
+        # the kaem phase's packages (kaem-steps) come before any shell
+        if [ -f "$d/kaem-steps" ]; then
+            continue
+        fi
         missing=$("$STAR" recipe --repo packages --root . --format shpack "$n" | awk '
             /^## /  { s = $2; next }
             s == "versions" { v[++nv] = $1 }
@@ -69,6 +73,15 @@ if [ -n "${STAR:-}" ]; then
             bad=1
         fi
     done
+fi
+
+# The Spack environment (../spack.yaml) installs exactly the kaem phase's
+# packages unhashed, as the kaem phase does.
+want=$(for k in packages/*/kaem-steps; do n=${k%/kaem-steps}; echo "${n##*/}"; done | sort)
+got=$(sed -n 's/^        \([a-z0-9-]*\): "{name}-{version}"$/\1/p' ../spack.yaml | sort)
+if [ "$want" != "$got" ]; then
+    printf 'spack.yaml projections disagree with kaem-steps:\n%s\n--- vs ---\n%s\n' "$got" "$want" >&2
+    bad=1
 fi
 
 # The sh() escape hatch in Starlark recipes: allowed, but counted, so the
