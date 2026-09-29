@@ -19,6 +19,8 @@
  * host.json_decode(s)     the value of a JSON text; numbers with a fraction or an
  *                         exponent are truncated to ints (the dialect has no floats)
  * host.star_version       "star 1.0"
+ * host.time               the Unix time at which star started (for the store
+ *                         database; nothing hashed may depend on it)
  *
  * The module's ENTRY function (--entry, default "concretize") is called as
  * ENTRY(host, cfg, specs) and returns {"files": {path: content}, "stdout": s};
@@ -27,6 +29,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
 
 static const char *opt_module, *opt_cfg, *opt_entry = "concretize";
 
@@ -593,10 +596,10 @@ int concretize_main(int argc, char **argv)
     cfg = load_cfg();
     {
         const char *names[] = {"recipe", "files", "sha256", "sha256_file", "read", "list",
-                               "json", "json_decode", "star_version"};
-        Str *sn[9];
-        V sv[9];
-        for (i = 0; i < 9; i++)
+                               "json", "json_decode", "star_version", "time"};
+        Str *sn[10];
+        V sv[10];
+        for (i = 0; i < 10; i++)
             sn[i] = intern(names[i]);
         sv[0] = mk_builtin("recipe", h_recipe, NULL);
         sv[1] = mk_builtin("files", h_files, NULL);
@@ -607,7 +610,8 @@ int concretize_main(int argc, char **argv)
         sv[6] = mk_builtin("json", h_json, NULL);
         sv[7] = mk_builtin("json_decode", h_json_decode, NULL);
         sv[8] = mk_cstr("star " STAR_VERSION);
-        host = mk_struct("host", 9, sn, sv);
+        sv[9] = mk_int((int64_t)time(NULL));
+        host = mk_struct("host", 10, sn, sv);
     }
     m = load_module(opt_module, NULL);
     fn = module_global(m, opt_entry);

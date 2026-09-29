@@ -15,7 +15,8 @@
 # - Every record already there is kept: Spack may own part of the store (a
 #   package it installed, or an `install --overwrite` of one of shpack's).
 # - A node installed now -- its prefix has .spack/spec.json, or it is a
-#   kaem-phase external -- is recorded as installed unless it already was;
+#   kaem-phase external -- is recorded as installed unless it already was,
+#   with this run's time as its installation_time (BASEPATH has no `date`);
 #   a requested (root) node is marked explicit, as `spack install` does.
 # - ref_count is recounted over the whole database, as Spack counts it: the
 #   records that depend on a node.
@@ -56,14 +57,13 @@ def spack_db(host, cfg, specs):
         if old != None and old["installed"]:
             old["explicit"] = old["explicit"] or explicit
             continue
-        t = (host.read(d + "installation_time") or "0").strip()
         installs[h] = {
             "spec": spec,
             "ref_count": 0,
             "path": prefix,
             "installed": True,
             "explicit": explicit or (old != None and old["explicit"]),
-            "installation_time": int(t) if t.isdigit() else 0,
+            "installation_time": host.time,
             "deprecated_for": None,
         }
 

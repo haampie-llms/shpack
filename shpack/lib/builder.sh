@@ -210,8 +210,7 @@ do_finalize() {
     # or 755 if executable at all (Spack's default install permissions too).
     chmod -R u=rwX,go=rX "$PREFIX"
     # .spack/spec.json last: it marks the prefix installed, for shpack and
-    # Spack alike. The time goes to the database (lib/spackdb.star).
-    date +%s > "$SPEC/installation_time"
+    # Spack alike.
     cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
     cd /
     # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
