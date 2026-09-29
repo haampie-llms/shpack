@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+#
+# One step of the kaem-phase base: ${BOOT}/${pkg}/kaem.run, installing into
+# ${PREFIX}, under the environment contract of README.md. base.kaem includes
+# it once per step, and Spack's star-recipes adapter runs it (kaem --file) to
+# build the same step, so the contract is written down once, here. It takes:
+#
+#   ROOT ARCH STORE DISTFILES BUILDDIR   as start.kaem sets them
+#   SEED     the seed's prefix, tcc 0.9.27 (which holds musl)
+#   pkg      the step: its directory in shpack/bootstrap
+#   PREFIX   where it installs
+#   STEPS    the bin directories of the steps before it, newest first, each
+#            followed by ':' (unset for the first)
+#
+# and leaves STEPS extended by this step's, for the next one.
+
+SEEDDIR=${ROOT}/seed
+BOOT=${ROOT}/shpack/bootstrap
+MESR=${ROOT}/vendor/mes-replacement
+TMPDIR=${BUILDDIR}
+HOME=${BUILDDIR}/home
+TERM=dumb
+LIBC_PREFIX=${SEED}
+LIBDIR=${SEED}/lib
+INCDIR=${SEED}/include
+PKG=${BOOT}/${pkg}
+BINDIR=${PREFIX}/bin
+
+# the step, the steps before it newest first, then what the seed puts on PATH
+include ${BOOT}/seed.path
+PATH=${BINDIR}:${STEPS}${SEEDPATH}
+
+mkdir -p ${BINDIR}
+mkdir -p ${HOME}
+kaem --verbose --strict --file ${PKG}/kaem.run
+STEPS=${BINDIR}:${STEPS}

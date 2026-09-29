@@ -17,8 +17,18 @@ write_metadata() {
     rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
     cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
     cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
-    chmod -R u=rwX,go=rX "$PREFIX"
+    normalize_modes
     cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+}
+
+# load_node ID KIND -- SPEC, id, name and PREFIX of a node of the given kind.
+load_node() {
+    id=$1
+    SPEC=$VAR/spec/$id
+    [ -f "$SPEC/kind" ] || die "unknown node '$id' (run shpack concretize)"
+    [ "$(cat "$SPEC/kind")" = "$2" ] || die "node '$id' is not $2"
+    name=$(cat "$SPEC/name")
+    PREFIX=$(cat "$SPEC/prefix")
 }
 
 # cmd_register_one -- a node the kaem phase installed (its recipe's
@@ -26,11 +36,7 @@ write_metadata() {
 # finalize writes it.
 cmd_register_one() {
     if [ $# -ne 1 ]; then die "usage: shpack register-one <id>"; fi
-    id=$1
-    SPEC=$VAR/spec/$id
-    [ "$(cat "$SPEC/kind")" = kaem ] || die "node '$id' is not the kaem phase's"
-    name=$(cat "$SPEC/name")
-    PREFIX=$(cat "$SPEC/prefix")
+    load_node "$1" kaem
     [ -d "$PREFIX" ] || die "$id: the kaem phase did not install $PREFIX"
     write_metadata
     echo "==> $id: registered $PREFIX"
@@ -40,12 +46,7 @@ cmd_register_one() {
 # installed already, then record it.
 cmd_build_one() {
     if [ $# -ne 1 ]; then die "usage: shpack build-one <id>"; fi
-    id=$1
-    SPEC=$VAR/spec/$id
-    [ -f "$SPEC/kind" ] || die "unknown node '$id' (run shpack concretize)"
-    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is not built by shpack (external or kaem)"
-    name=$(cat "$SPEC/name")
-    PREFIX=$(cat "$SPEC/prefix")
+    load_node "$1" built
     if [ -f "$PREFIX/.spack/spec.json" ]; then
         echo "$id is already installed in $PREFIX"
         return 0
