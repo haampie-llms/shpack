@@ -4876,7 +4876,9 @@ void gen_init_globals(void)
 
 int main(int argc, char *argv[])
 {
-	include_path = malloc(100);
+	// parse_file copies the input path in, and "..." includes replace its file
+	// name: room for a real path (100 overflowed on package-manager stage dirs)
+	include_path = malloc(4096);
 
 	get_env("__TCC_CC__", TRUE);
 	bool init = FALSE;
