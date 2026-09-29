@@ -12,10 +12,12 @@
  *                         dotfiles and dangling symlinks skipped
  * host.sha256(s)          the hex digest of a string
  * host.sha256_file(path)  ... of a file
+ * host.sha1(s)            the hex SHA-1 digest of a string (Spack's DAG hash)
  * host.read(path)         a file's content, None if it does not exist
  * host.list(dir)          the names in a directory, sorted bytewise, no dotfiles;
  *                         None if it is not one
- * host.json(value)        value as JSON (the canonical form of --format json)
+ * host.json(value)        value as JSON (the canonical form of --format json);
+ *   compact = True          Python's compact json.dumps, byte for byte (ASCII)
  * host.json_decode(s)     the value of a JSON text; numbers with a fraction or an
  *                         exponent are truncated to ints (the dialect has no floats)
  * host.star_version       "star 1.0"
@@ -250,6 +252,18 @@ static V h_sha256(Args *a)
     return mk_cstr(hex);
 }
 
+static V h_sha1(Args *a)
+{
+    V s;
+    Sha1 h;
+    char hex[41];
+    unpack_positional(a, 1, 1, &s);
+    sha1_init(&h);
+    sha1_update(&h, want_str(s, "sha1")->s, AS_STR(s)->len);
+    sha1_hex(&h, hex);
+    return mk_cstr(hex);
+}
+
 static V h_sha256_file(Args *a)
 {
     V p;
@@ -303,11 +317,13 @@ static V h_list(Args *a)
 
 static V h_json(Args *a)
 {
-    V v;
+    V v, compact = NULL;
     Buf b;
-    unpack_positional(a, 1, 1, &v);
+    unpack_args(a, "value", &v, "compact?", &compact, NULL);
     buf_init(&b);
+    json_py = compact && truth(compact);
     json_value(&b, v);
+    json_py = 0;
     return mk_str(b.p ? b.p : "", b.len);
 }
 
@@ -596,10 +612,10 @@ int concretize_main(int argc, char **argv)
     cfg = load_cfg();
     {
         const char *names[] = {"recipe", "files", "sha256", "sha256_file", "read", "list",
-                               "json", "json_decode", "star_version", "time"};
-        Str *sn[10];
-        V sv[10];
-        for (i = 0; i < 10; i++)
+                               "json", "json_decode", "star_version", "time", "sha1"};
+        Str *sn[11];
+        V sv[11];
+        for (i = 0; i < 11; i++)
             sn[i] = intern(names[i]);
         sv[0] = mk_builtin("recipe", h_recipe, NULL);
         sv[1] = mk_builtin("files", h_files, NULL);
@@ -611,7 +627,8 @@ int concretize_main(int argc, char **argv)
         sv[7] = mk_builtin("json_decode", h_json_decode, NULL);
         sv[8] = mk_cstr("star " STAR_VERSION);
         sv[9] = mk_int((int64_t)time(NULL));
-        host = mk_struct("host", 10, sn, sv);
+        sv[10] = mk_builtin("sha1", h_sha1, NULL);
+        host = mk_struct("host", 11, sn, sv);
     }
     m = load_module(opt_module, NULL);
     fn = module_global(m, opt_entry);

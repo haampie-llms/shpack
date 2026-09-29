@@ -254,10 +254,12 @@ and the externals to the state files and `dag.mk`, in the spirit of Spack's
 old greedy concretizer rather than its solver. `shpack install <name>` resolves names to concrete versions (the first version
 a recipe declares wins; `name@version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
-DAG, and assigns every node a Merkle hash: sha256 over the recipe text,
-auxiliary files, the build-system modules it loads, the evaluator version,
-source checksums, target arch, and the hashes and types of all direct dependencies. Anything changing anywhere in a package's closure changes its
-hash.
+DAG, and assigns every node a Merkle hash: Spack's DAG hash of the node as
+Spack records it, whose package hash covers the recipe text, auxiliary files,
+the build-system modules it loads, the evaluator version, source checksums and
+target arch, and which holds the hashes of all direct dependencies. Anything
+changing anywhere in a package's closure changes its hash, and a Spack with
+this repository computes the same one (star/SPACK.md).
 
 The store is a Spack install tree. Every package installs where Spack would
 put it, `$STORE/linux-<target>/<name>-<version>-<hash>` (the hash in Spack's

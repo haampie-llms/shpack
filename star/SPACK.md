@@ -42,6 +42,23 @@ repo reuses them. Three things have to agree:
   version-only stubs, which shpack ignores (`buildable=false` in
   `etc/externals`).
 
+## Same hashes
+
+shpack's node hash is Spack's DAG hash (the base32 SHA-1 of the node's JSON as
+`Spec.to_node_dict` makes it), and its package hash is Spack's `content_hash`
+over the adapter's `source_hash`: shpack's package text (`package_text` in
+lib/concretize.star), which covers every file in the package directory, the
+sources, the evaluator and every loaded module. Every Starlark package
+requires `os=shpack`, an OS the adapter registers on the host platform, as
+shpack records it. So `spack spec --fresh gcc-boot0` gives shpack's hashes,
+and Spack installs where shpack does.
+
+Checked in the VM up to gcc-boot0, with the kaem-phase prefixes as externals
+(`os=shpack`) and shpack's base environment (`SPACK_STAR_BASE_ENV`): Spack's
+build of the 11 recipes, in its own stage directories, is byte-identical to
+shpack's (`.spack/` aside). Stage paths do not reach these prefixes: shpack
+builds with two different `BUILDDIR`s are identical too.
+
 ## Status
 
 Spack built the full gcc 16 DAG (31 packages) from these recipes. It ran with

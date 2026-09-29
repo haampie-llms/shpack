@@ -12,7 +12,7 @@
 #     edges             "ID TYPES" per direct dep, TYPES as in Spack (build,link,...)
 #     closure           transitive dep ids, sorted
 #     path              the build's PATH before BASEPATH: "DIR/bin:DIR/bin:..."
-#     manifest          the canonical hash input (kept for auditability)
+#     manifest          the package text behind the node's package hash (package_text)
 #   and for built nodes, what the builder takes from the recipe:
 #     sources           "SHA FNAME URL" per distfile: the version's, its resources'
 #     patches           "FILE LEVEL" per patch that applies to this version and arch
@@ -67,10 +67,27 @@ _TARGETS = {"amd64": "x86_64", "aarch64": "aarch64"}
 # The Spack namespace of shpack's recipes, as shpack/repo.yaml declares it: a
 # Spack with that repo registered knows the recorded specs, so it reuses them.
 _NAMESPACE = "bootstrap"
+_SPECFILE_VERSION = 6    # spack.spec.SPECFILE_FORMAT_VERSION
+
+def _b32pad(hexdigest):
+    """base64.b32encode(digest).lower(), padding included: how Spack spells a
+    package hash (the base32 SHA-256 of spack.package_base.content_hash)."""
+    nbits = len(hexdigest) * 4
+    out = []
+    for i in range((nbits + 4) // 5):
+        v = 0
+        for b in range(5):
+            bit = 5 * i + b
+            v = v * 2
+            if bit < nbits:
+                v += (int(hexdigest[bit // 4], 16) >> (3 - bit % 4)) & 1
+        out.append(_B32[v])
+    return "".join(out) + "=" * ((8 - len(out) % 8) % 8)
 
 def _b32(hexdigest):
-    """The first 32 characters of the lowercase base32 encoding of a digest, as
-    Spack spells its hashes (160 of the 256 bits)."""
+    """The first 32 characters of the lowercase base32 encoding of a digest:
+    all of a SHA-1's, which is how Spack spells a DAG hash (spack.util.hash.
+    b32_hash)."""
     out = []
     for i in range(32):
         bit = 5 * i
@@ -149,11 +166,7 @@ def concretize(host, cfg, specs):
         r = f["r"]
         n = {"name": r.name, "version": r.version, "kind": r.kind, "deps": [], "edges": [],
              "closure": [], "order": [], "exec": [], "path": []}
-        if r.kind == "external":
-            # Identity only: the prefix is a deployment detail, and hashing it
-            # would make every hash depend on where the store lives.
-            n["manifest"] = "external %s %s\n" % (r.name, r.version)
-        else:
+        if r.kind != "external":
             closure = []
             for depid, types in f["edges"]:
                 dep = nodes[depid]
@@ -174,38 +187,50 @@ def concretize(host, cfg, specs):
                     for c in [depid] + dep["exec"]:
                         _add(n["path"], c)
             n["closure"] = sorted({c: None for c in closure}.keys())
-            n["manifest"] = manifest(r, f["edges"])
             n["recipe"] = build_inputs(r)
-        # Spack's spelling of the hash: base32, 32 characters; stamps, logs and
-        # the tree use the first 7, as `spack find -l` shows them.
-        n["spack_hash"] = _b32(host.sha256(n["manifest"]))
+        # The hash is Spack's DAG hash of the node as Spack records it: the
+        # base32 SHA-1 of its JSON, which holds the dependencies' hashes and the
+        # package hash (package_hash). A Spack with this repository (and the
+        # star-recipes adapter) computes the same, so it installs where shpack
+        # does. Stamps, logs and trees use the first 7, as `spack find -l`.
+        n["manifest"] = package_text(r)
+        node = spack_node(r, n, f["edges"])
+        n["spack_hash"] = _b32(host.sha1(host.json(node, compact = True)))
         n["hash"] = n["spack_hash"][:7]
-        # Spack's default layout, {platform}-{target}/{name}-{version}-{hash},
-        # so that Spack pointed at the store installs where shpack does.
+        node["hash"] = n["spack_hash"]
+        n["spack"] = host.json(node)
+        # Spack's default layout, {platform}-{target}/{name}-{version}-{hash}.
         n["prefix"] = r.prefix if r.kind == "external" else "%s/linux-%s/%s-%s" % (
             store, _TARGETS.get(cfg["arch"], cfg["arch"]), r.id, n["spack_hash"])
-        n["spack"] = host.json(spack_node(r, n, f["edges"]))
         nodes[r.id] = n
         active.pop(r.id)
         topo.append(r.id)
 
     def spack_node(r, n, edges):
-        """The node as a Spack spec (spec.json, .spack-db/index.json)."""
+        """The node as Spack's Spec.to_node_dict makes it, key for key: what the
+        DAG hash is computed over (spec.json and .spack-db add the hash)."""
+        patches = [sha for sha, _ in applied_patches(r)]
         node = {
             "name": r.name,
             "version": r.version,
             "arch": {"platform": "linux", "platform_os": cfg.get("platform_os", "shpack"),
                      "target": _TARGETS.get(cfg["arch"], cfg["arch"])},
             "namespace": _NAMESPACE,
+            # variants by name, then the compiler flags
             "parameters": {
                 # the Spack side declares none (star/SPACK.md): the plan picks it
                 "build_system": "generic",
-                "cflags": [], "cppflags": [], "cxxflags": [], "fflags": [], "ldflags": [],
-                "ldlibs": [],
             },
         }
+        if patches:
+            node["parameters"]["patches"] = sorted(patches)
+        for flags in ["cflags", "cppflags", "cxxflags", "fflags", "ldflags", "ldlibs"]:
+            node["parameters"][flags] = []
         if r.kind == "external":
             node["external"] = {"path": r.prefix, "module": None, "extra_attributes": {}}
+        if patches:
+            node["patches"] = patches   # in order of appearance
+        node["package_hash"] = content_hash(r)
         # Every edge is a build edge, as Spack declares the recipe's (star/SPACK.md,
         # "Dependency types"): a reused node's link or run edges would pull their
         # targets into Spack's root unification set, which only link/run edges of
@@ -214,7 +239,7 @@ def concretize(host, cfg, specs):
                  "parameters": {"deptypes": ["build"], "virtuals": []}} for d, _ in edges]
         if deps:
             node["dependencies"] = sorted(deps, key = lambda d: d["name"])
-        node["hash"] = n["spack_hash"]
+        node["annotations"] = {"original_specfile_version": _SPECFILE_VERSION}
         return node
 
     def sources(r):
@@ -224,6 +249,26 @@ def concretize(host, cfg, specs):
                 if d["directive"] == "version" and d["version"] == r.version and d["sha256"]] + [
                 (d["sha256"], d["fname"], d["url"] or "-") for d in ds
                 if d["directive"] == "resource" and _when_matches(d["when"], r.version)]
+
+    def applied_patches(r):
+        """(sha256, level) of the recipe's patches that apply, in recipe order."""
+        if r.kind == "external":
+            return []
+        return [(host.sha256_file("%s/%s/patches/%s" % (cfg["repo"], r.name, d["file"])),
+                 d["level"]) for d in record(r.name)["directives"]
+                if d["directive"] == "patch" and _when_matches(d["when"], r.version, cfg["arch"])]
+
+    def content_hash(r):
+        """spack.package_base.content_hash, which Spack records as the package
+        hash: the version's source digest, each applied patch as "SHA:LEVEL",
+        and the base32 SHA-1 of the package text, sorted and concatenated."""
+        digest = [d["sha256"] for d in (record(r.name) or {"directives": []})["directives"]
+                  if d["directive"] == "version" and d["version"] == r.version and
+                  d["sha256"]]
+        parts = [digest[0] if digest else ""]
+        parts += ["%s:%d" % p for p in applied_patches(r)]
+        parts.append(_b32(host.sha1(package_text(r))))
+        return _b32pad(host.sha256("".join(sorted(parts))))
 
     def build_inputs(r):
         """The builder's files from the recipe: sources, patches, parallel."""
@@ -238,9 +283,14 @@ def concretize(host, cfg, specs):
             files["parallel"] = "false\n"
         return files
 
-    def manifest(r, edges):
+    def package_text(r):
+        """What Spack's package hash sees of a recipe (star_package.source_hash):
+        everything that determines the build but the dependencies, which the
+        DAG hash covers by their own hashes."""
         rec = record(r.name)
         out = ["package " + r.name, "version " + r.version, "arch " + cfg["arch"]]
+        if not rec:
+            return _lines(out)   # an external without a recipe
         out += ["source %s %s" % (sha, fname) for sha, fname, _ in sources(r)]
         for path, sha in host.files(r.name):
             out.append("file %s %s" % (sha, path))
@@ -249,8 +299,6 @@ def concretize(host, cfg, specs):
         out.append("evaluator " + host.star_version)
         for path in rec["loads"]:
             out.append("load %s %s" % (host.sha256_file(cfg["star_root"] + "/" + path), path))
-        out += sorted(["dep %s %s %s %s" % (nodes[d]["name"], nodes[d]["version"],
-                                            nodes[d]["hash"], t) for d, t in edges])
         return _lines(out)
 
     def visit(spec):
