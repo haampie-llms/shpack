@@ -22,7 +22,7 @@ and both hosts derive a build's environment from them by Spack's rule
 into what Spack would make a single unification set, and duplicates of link
 dependencies are beyond it, under `duplicates: minimal` and `full` alike.
 Declared as build edges, shpack's DAG concretizes (the packages are tagged
-`build-tools`). The adapter keeps the recipe's types (`_star_deps`) for PATH,
+`build-tools`). The adapter keeps the recipe's types (`StarPackage.declared_edges`) for PATH,
 the compiler wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
 
 ## Reuse
@@ -44,7 +44,7 @@ repo reuses them. Three things have to agree:
 
 shpack's node hash is Spack's DAG hash (the base32 SHA-1 of the node's JSON as
 `Spec.to_node_dict` makes it), and its package hash is Spack's `content_hash`
-over the adapter's `source_hash`: shpack's package text (`package_text` in
+over the adapter's `StarPackage.package_text`: shpack's package text (`package_text` in
 lib/concretize.star), which covers every file in the package directory, the
 sources, the evaluator and every loaded module. Every Starlark package
 requires `os=shpack`, an OS the adapter registers on the host platform, as

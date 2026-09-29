@@ -293,7 +293,7 @@ def concretize(host, cfg, specs):
         return files
 
     def package_text(r):
-        """What Spack's package hash sees of a recipe (star_recipe.source_hash):
+        """What Spack's package hash sees of a recipe (StarPackage.package_text):
         everything that determines the build but the dependencies, which the
         DAG hash covers by their own hashes."""
         rec = record(r.name)
