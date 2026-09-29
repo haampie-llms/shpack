@@ -33,6 +33,10 @@ SANDBOX=${SANDBOX-$STORE/sandbox-1.0/bin/sandbox}
 # /bin/sh for install-sh/config.guess and friends. Empty skips it.
 PATCH_SHEBANGS=${PATCH_SHEBANGS-$STORE/patch-shebangs-1.0/bin/patch-shebangs}
 
+# The builder (lib/builder.sh, kaem phase): `shpack build-one` runs it on
+# CONFIG_SHELL. Spack's adapter runs the same one from the store.
+SHPACK_BUILDER=${SHPACK_BUILDER-$STORE/shpack-builder-1.0/bin/shpack-build}
+
 # The Starlark evaluator for package.star recipes (kaem phase, built right
 # after tcc+musl). `star concretize` runs lib/concretize.star over the
 # recipes, `star plan` renders a node's build.

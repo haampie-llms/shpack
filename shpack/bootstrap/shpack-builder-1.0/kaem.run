@@ -1,0 +1,15 @@
+#!/kaem --verbose --strict
+# SPDX-License-Identifier: MIT
+#
+# shpack-builder: the builder of the shell phase (shpack/bin/shpack-build and
+# the libraries it sources), installed as a package so that every host builds
+# a node by the same script, and so that its content is in every hash: shpack's
+# dag.mk and Spack's adapter both run `sh ${PREFIX}/bin/shpack-build ID`.
+# Shell scripts, copied; dash-boot, the step after it, depends on it.
+
+mkdir -p ${BINDIR} ${PREFIX}/lib
+cp ${ROOT}/shpack/bin/shpack-build ${BINDIR}/shpack-build
+cp ${ROOT}/shpack/lib/builder.sh ${PREFIX}/lib/builder.sh
+cp ${ROOT}/shpack/lib/spec.sh ${PREFIX}/lib/spec.sh
+chmod 755 ${BINDIR}/shpack-build
+chmod 644 ${PREFIX}/lib/builder.sh ${PREFIX}/lib/spec.sh

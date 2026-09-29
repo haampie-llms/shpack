@@ -7,11 +7,11 @@
 #
 #   spec/<id>/        one dir per node, id = name-version: what the builder
 #                     and `shpack env` read, nothing else
-#     name, version, kind (built|external), hash, prefix
+#     name, version, kind (built|kaem|external), hash, prefix
 #     deps              direct dep ids, recipe order
 #     edges             "ID TYPES" per direct dep, TYPES as in Spack (build,link,...)
 #     closure           transitive dep ids, sorted
-#     path              the build's PATH before BASEPATH: "DIR/bin:DIR/bin:..."
+#     step              a kaem node's step (kaem-steps): its bootstrap dir, or "seed"
 #     manifest          the package text behind the node's package hash (package_text)
 #   and for built nodes, what the builder takes from the recipe:
 #     sources           "SHA FNAME URL" per distfile: the version's, its resources'
@@ -84,10 +84,6 @@ def _b32(hexdigest):
                 v += (int(hexdigest[bit // 4], 16) >> (3 - bit % 4)) & 1
         out.append(_B32[v])
     return "".join(out) + "=" * ((8 - len(out) % 8) % 8)
-
-def _add(lst, x):
-    if x not in lst:
-        lst.append(x)
 
 def concretize(host, cfg, specs):
     if not specs:
@@ -169,27 +165,15 @@ def concretize(host, cfg, specs):
     def finish(f):
         r = f["r"]
         n = {"name": r.name, "version": r.version, "kind": r.kind, "deps": [], "edges": [],
-             "closure": [], "order": [], "exec": [], "path": []}
+             "closure": []}
+        if r.kind == "kaem":
+            n["step"] = kaem_steps(r.name)[r.version][0]
         if r.kind != "external":
             closure = []
             for depid, types in f["edges"]:
-                dep = nodes[depid]
                 n["deps"].append(depid)
                 n["edges"].append(depid + " " + types)
-                closure += [depid] + dep["closure"]
-                for c in dep["order"] + [depid]:
-                    _add(n["order"], c)
-                # What goes on PATH, as Spack decides it: a build dep, and
-                # what it runs -- its run deps, through run and link edges.
-                t = types.split(",")
-                if "run" in t:
-                    _add(n["exec"], depid)
-                if "run" in t or "link" in t:
-                    for c in dep["exec"]:
-                        _add(n["exec"], c)
-                if "build" in t or "test" in t:
-                    for c in [depid] + dep["exec"]:
-                        _add(n["path"], c)
+                closure += [depid] + nodes[depid]["closure"]
             n["closure"] = sorted({c: None for c in closure}.keys())
             if r.kind == "built":
                 n["recipe"] = build_inputs(r)
@@ -353,14 +337,6 @@ def concretize(host, cfg, specs):
 
     roots = [visit(s) for s in specs]
 
-    def compose_path(id):
-        n = nodes[id]
-        out = n["prefix"] + "/bin:"
-        for c in reversed(n["order"]):
-            if c in n["path"]:
-                out += nodes[c]["prefix"] + "/bin:"
-        return out
-
     files = {"topo": _lines(topo), "roots": _lines(roots)}
     for id in topo:
         n = nodes[id]
@@ -369,8 +345,9 @@ def concretize(host, cfg, specs):
             files[d + k] = n[k] + "\n"
         for k in ["deps", "edges", "closure"]:
             files[d + k] = _lines(n[k])
+        if "step" in n:
+            files[d + "step"] = n["step"] + "\n"
         files[d + "manifest"] = n["manifest"]
-        files[d + "path"] = compose_path(id) + "\n"
         for k, v in n.get("recipe", {}).items():
             files[d + k] = v
         # The node as Spack sees it, for the database (spackdb.star); and, for
@@ -387,7 +364,7 @@ def concretize(host, cfg, specs):
     for id in roots:
         if nodes[id]["kind"] != "external":
             files["spec/" + id + "/explicit"] = ""   # as `spack install` marks its roots
-    files["dag.mk"] = dagmk(cfg, nodes, topo, roots, compose_path)
+    files["dag.mk"] = dagmk(cfg, nodes, topo, roots)
     out = tree(nodes, roots)
     out += "concretized %d node(s); makefile at %s/dag.mk\n" % (len(topo), cfg["var"])
     return {"files": files, "stdout": out}
@@ -395,10 +372,11 @@ def concretize(host, cfg, specs):
 def _stamp(nodes, id):
     return "%s-%s" % (id, nodes[id]["hash"])
 
-def dagmk(cfg, nodes, topo, roots, compose_path):
+def dagmk(cfg, nodes, topo, roots):
     """One stamp target per built node; direct built deps as prerequisites
     (make supplies transitivity); the recipe runs `shpack build-one` in its own
-    process with the precomposed PATH, logging to one file per package. '+'
+    process on the base PATH (the builder composes the build's own), logging
+    to one file per package. '+'
     marks the recipe recursive so MAKEFLAGS (jobserver) reaches inner makes.
     Compatible with make 3.82, the only scheduler alive at shell-phase start."""
     sandbox = cfg["sandbox"]
@@ -447,7 +425,7 @@ def dagmk(cfg, nodes, topo, roots, compose_path):
                 pre = "mkdir -p %s; " % prefix
                 wrap = ("$(SANDBOX) --read $(STORE) --read $(SHPACK) --read $(REPO) " +
                         "--read $(DISTFILES) --write $(V) --write %s -- " % prefix)
-            out.append("\t+@%sPATH=%s$(BASEPATH) \\" % (pre, compose_path(id)))
+            out.append("\t+@%sPATH=$(BASEPATH) \\" % pre)
             out.append("\t  %s$(SHELL) %s/bin/shpack build-one %s >$(L)/%s.log 2>&1 \\" %
                        (wrap, cfg["shpack_root"], id, id))
         out.append('\t  || { echo "!! %s FAILED, tail of $(L)/%s.log:"; tail -n 40 $(L)/%s.log; exit 1; }' %

@@ -31,6 +31,7 @@ spack:
         patch-shebangs: "{name}-{version}"
         sandbox: "{name}-{version}"
         sed-boot: "{name}-{version}"
+        shpack-builder: "{name}-{version}"
         star: "{name}-{version}"
         tar-boot: "{name}-{version}"
         tcc: "{name}-{version}"

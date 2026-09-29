@@ -113,8 +113,14 @@ cmd_env() {
         fi
     done < "$VAR/index"
     [ -n "$found" ] || die "'$1' is not in the concretized DAG"
-    printf 'PREFIX=%s\n' "$(cat "$VAR/spec/$found/prefix")"
-    printf 'PATH=%s%s\n' "$(cat "$VAR/spec/$found/path")" "$BASEPATH"
+    # the builder's own composition (lib/builder.sh)
+    id=$found
+    SPEC=$VAR/spec/$id
+    PREFIX=$(cat "$SPEC/prefix")
+    cat "$SPEC/deps" "$SPEC/closure" > "$SPEC/deps.all"
+    compose_env
+    printf 'PREFIX=%s\n' "$PREFIX"
+    printf 'PATH=%s\n' "$PATH"
 }
 
 cmd_find() {
