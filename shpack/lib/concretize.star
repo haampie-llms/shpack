@@ -30,7 +30,9 @@
 # backtracking: `name@version` pins that exact version; a bare name is the
 # first version its recipe declares; a recipe always beats an external
 # (cfg["externals"], "name@version prefix" lines), which are the fallback for
-# names with no recipe and for explicit pins onto kaem-phase seeds.
+# names with no recipe and for explicit pins onto kaem-phase seeds. A name
+# listed there as "NAME buildable=false" (Spack's `buildable: false`) has its
+# recipe ignored: that recipe is a stub, so that Spack knows the package.
 #
 # Starlark has no recursion or while: the depth-first walks keep their own
 # stacks, and loop over a range that is far longer than any DAG.
@@ -62,6 +64,9 @@ def _when_matches(when, version, arch = None):
 
 _B32 = "abcdefghijklmnopqrstuvwxyz234567"
 _TARGETS = {"amd64": "x86_64", "aarch64": "aarch64"}
+# The Spack namespace of shpack's recipes, as shpack/repo.yaml declares it: a
+# Spack with that repo registered knows the recorded specs, so it reuses them.
+_NAMESPACE = "bootstrap"
 
 def _b32(hexdigest):
     """The first 32 characters of the lowercase base32 encoding of a digest, as
@@ -73,19 +78,6 @@ def _b32(hexdigest):
         byte = int(hexdigest[j:j + 2], 16)
         out.append(_B32[(byte >> (3 - bit % 4)) & 31])
     return "".join(out)
-
-def _build_system(rec, version):
-    """The build system of this version, as star plan picks it."""
-    for d in rec["directives"]:
-        if d["directive"] != "build_system":
-            continue
-        for v in d["values"]:
-            if v["name"] == d["default"] and _when_matches(v["when"], version):
-                return v["name"]
-        for v in d["values"]:
-            if _when_matches(v["when"], version):
-                return v["name"]
-    return "generic"
 
 def _add(lst, x):
     if x not in lst:
@@ -103,19 +95,24 @@ def concretize(host, cfg, specs):
         return records[name]
 
     externals = []
+    unbuildable = {}    # "NAME buildable=false": the recipe is only there for Spack
     text = host.read(cfg["externals"])
     for line in (text or "").split("\n"):
         fields = line.strip(" \t").split(None, 1)
         if not fields or fields[0].startswith("#"):
             continue
-        externals.append((fields[0], fields[1].strip(" \t") if len(fields) > 1 else ""))
+        rest = fields[1].strip(" \t") if len(fields) > 1 else ""
+        if rest == "buildable=false":
+            unbuildable[fields[0]] = True
+            continue
+        externals.append((fields[0], rest))
 
     def versions(rec):
         return [d for d in rec["directives"] if d["directive"] == "version"]
 
     def resolve(spec):
         name, at, want = spec.partition("@")
-        rec = record(name)
+        rec = None if name in unbuildable else record(name)
         if rec:
             for d in versions(rec):
                 if at and d["version"] != want:
@@ -194,23 +191,27 @@ def concretize(host, cfg, specs):
 
     def spack_node(r, n, edges):
         """The node as a Spack spec (spec.json, .spack-db/index.json)."""
-        rec = record(r.name)
         node = {
             "name": r.name,
             "version": r.version,
             "arch": {"platform": "linux", "platform_os": cfg.get("platform_os", "shpack"),
                      "target": _TARGETS.get(cfg["arch"], cfg["arch"])},
-            "namespace": cfg.get("namespace", "shpack"),
+            "namespace": _NAMESPACE,
             "parameters": {
-                "build_system": _build_system(rec, r.version) if rec else "generic",
+                # the Spack side declares none (star/SPACK.md): the plan picks it
+                "build_system": "generic",
                 "cflags": [], "cppflags": [], "cxxflags": [], "fflags": [], "ldflags": [],
                 "ldlibs": [],
             },
         }
         if r.kind == "external":
             node["external"] = {"path": r.prefix, "module": None, "extra_attributes": {}}
+        # Every edge is a build edge, as Spack declares the recipe's (star/SPACK.md,
+        # "Dependency types"): a reused node's link or run edges would pull their
+        # targets into Spack's root unification set, which only link/run edges of
+        # the package graph can reach. The recipe's types stay in spec/<id>/edges.
         deps = [{"name": nodes[d]["name"], "hash": nodes[d]["spack_hash"],
-                 "parameters": {"deptypes": t.split(","), "virtuals": []}} for d, t in edges]
+                 "parameters": {"deptypes": ["build"], "virtuals": []}} for d, _ in edges]
         if deps:
             node["dependencies"] = sorted(deps, key = lambda d: d["name"])
         node["hash"] = n["spack_hash"]

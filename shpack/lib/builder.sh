@@ -194,10 +194,11 @@ do_patch() {
 
 do_finalize() {
     # Metadata as Spack keeps it, in .spack/: the recipe directory under
-    # repos/<namespace>/packages/, and shpack's own hash input and plan (the
-    # build log is copied in by dag.mk, as spack-build-out.txt).
-    mkdir -p "$PREFIX/.spack/repos/shpack/packages"
-    cp -R "$package_dir" "$PREFIX/.spack/repos/shpack/packages/$name"
+    # repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's), and shpack's
+    # own hash input and plan (the build log is copied in by dag.mk, as
+    # spack-build-out.txt).
+    mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
+    cp -R "$package_dir" "$PREFIX/.spack/repos/bootstrap/packages/$name"
     cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
     cp "$SPEC/build.sh" "$PREFIX/.spack/shpack-build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix

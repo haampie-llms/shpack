@@ -171,7 +171,7 @@ assert_contains "$oout" "--prefix=$op"
 assert_contains "$op/.spack/shpack-build.sh" "../../configure"
 
 # Starlark prefixes record the recipe and the executed plan
-assert_file "$mp/.spack/repos/shpack/packages/mkpkg/package.star"
+assert_file "$mp/.spack/repos/bootstrap/packages/mkpkg/package.star"
 assert_file "$mp/.spack/shpack-build.sh"
 
 # actions

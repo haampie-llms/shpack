@@ -275,13 +275,26 @@ $ spack find -l
 4cxpi2c gcc@16.1.0  ...
 ```
 
-With `shpack/` as a Spack repository (`repo.yaml`, and the `star-recipes`
-branch of Spack for `package.star`), Spack can also rebuild a node in place
-(`spack install --overwrite /4cxpi2c`); shpack then treats the prefix as
-installed, and keeps Spack's record. Packages the kaem phase already installed (unhashed
-`$STORE/<name>-<version>` prefixes) are registered in `etc/externals`,
-Spack-`packages.yaml`-style; they resolve like any other candidate and
-contribute their identity to dependents' hashes.
+`shpack/` is also a Spack package repository, namespace `bootstrap`
+(`repo.yaml`; the `star-recipes` branch of Spack reads `package.star`), and
+shpack records its installs under that namespace. With it registered, Spack
+reuses them:
+
+```console
+$ spack repo add --name bootstrap $PWD/shpack
+$ spack spec -l gcc-boot0
+[+]  f7v3s67  gcc-boot0@4.7-2013.11 build_system=generic platform=linux os=shpack target=aarch64
+[+]  jli4iow      ^binutils-boot0@2.30-musl build_system=generic ...
+```
+
+Spack can also rebuild a node in place (`spack install --overwrite /4cxpi2c`);
+shpack then treats the prefix as installed, and keeps Spack's record. Packages
+the kaem phase already installed (unhashed `$STORE/<name>-<version>` prefixes)
+are registered in `etc/externals`, Spack-`packages.yaml`-style; they resolve
+like any other candidate and contribute their identity to dependents' hashes.
+Spack needs them as `packages.yaml` externals too. Those with no recipe of their
+own (`tcc`, `dash-boot`, `star`) have a version-only stub, marked
+`buildable=false` there, so that Spack knows the package.
 
 ## Scheduling
 

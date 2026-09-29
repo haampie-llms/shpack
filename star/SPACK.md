@@ -25,6 +25,23 @@ Declared as build edges, shpack's DAG concretizes (the packages are tagged
 `build-tools`). The adapter keeps the recipe's types (`_star_deps`) for PATH,
 the compiler wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
 
+## Reuse
+
+shpack records its installs (`.spack/spec.json`, `.spack-db`) as Spack
+declares the recipes, so a Spack with this tree registered as the `bootstrap`
+repo reuses them. Three things have to agree:
+- **Edges are `build`.** A reused node's link or run edge would put its
+  target in the root unification set, which only link/run edges of the
+  package graph reach (`possible_in_link_run`); the solve would fail and
+  Spack would rebuild instead.
+- **`build_system` is `generic`.** The adapter declares no build system (the
+  plan carries it), so any other value is not one the package has.
+- **Every node's package exists in the repo.** A node Spack cannot load is
+  not reusable, and neither is anything that depends on it. The kaem-phase
+  seeds without a recipe of their own (`tcc`, `dash-boot`, `star`) have
+  version-only stubs, which shpack ignores (`buildable=false` in
+  `etc/externals`).
+
 ## Status
 
 Spack built the full gcc 16 DAG (31 packages) from these recipes. It ran with

@@ -26,6 +26,10 @@ done
 if [ -n "${STAR:-}" ]; then
     for d in packages/*/; do
         n=${d%/}; n=${n##*/}
+        # stubs of packages shpack never builds (etc/externals)
+        if grep -qE "^$n[ 	]+buildable=false\$" etc/externals; then
+            continue
+        fi
         missing=$("$STAR" recipe --repo packages --root . --format shpack "$n" | awk '
             /^## /  { s = $2; next }
             s == "versions" { v[++nv] = $1 }

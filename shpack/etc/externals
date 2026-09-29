@@ -4,8 +4,18 @@
 # style: "name@version prefix", the prefix relative to $STORE (an absolute
 # path is taken as-is). depends_on consults these only as a fallback: a
 # recipe version always wins for a bare name, so externals matter for names
-# with no recipe (tcc, dash) and for explicit @version pins onto these seeds.
-# Within this table the first matching line wins, so list preferred first.
+# that are not buildable (tcc) and for explicit @version pins onto these
+# seeds. Within this table the first matching line wins, so list preferred
+# first.
+#
+# "NAME buildable=false" is Spack's `buildable: false`: NAME always resolves
+# to an external here. Its recipe is a version-only stub, so that Spack, with
+# shpack/ registered as the `bootstrap` repo, knows the package and can reuse
+# what was built with it.
+
+tcc             buildable=false
+dash-boot       buildable=false
+star            buildable=false
 
 tcc@0.9.27      tcc-0.9.27
 tcc@0.9.26      tcc-0.9.26
