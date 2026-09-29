@@ -1,1 +1,1 @@
-"/bin/sh", 0, &attr,
+posix_spawn(&pid, "/bin/sh", 0, &attr,

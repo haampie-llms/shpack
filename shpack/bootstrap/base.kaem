@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: MIT
+#
+# The kaem-phase base above the seed, included by start.kaem once tcc 0.9.27
+# and the healed musl 1.1.24 are in the store (unless COMMAND=seed): shpack's
+# tools (sandbox, patch-shebangs, star), then make ... dash, one prefix per
+# package as in start.kaem, and finally the hand-over to the shell phase.
+
+# sandbox: the Landlock build-step launcher (project-original C, statically
+# linked with the just-built tcc+musl). The shell phase wraps every build with
+# it (see concretize.sh emit_dagmk), so it is built here as soon as tcc+musl
+# exist.
+pkg=sandbox-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# patch-shebangs: rewrites #!/bin/sh shebangs to the store shell so shell-phase
+# builds need no host /bin/sh. Built here for the same reason as sandbox -- as
+# soon as tcc+musl exist.
+pkg=patch-shebangs-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# star: the Starlark interpreter for package.star recipes (see star/). Built
+# here for the same reason as sandbox: tcc+musl is all it needs, and the shell
+# phase evaluates recipes with it from the first concretization on.
+pkg=star-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# tcc 0.9.27 + (float-healed) musl 1.1.24 are now in the store; what follows
+# builds with a real makefile.
+
+# make 3.82: first build tool; everything below builds with a real makefile.
+pkg=make-3.82
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# patch: every later package applies real unified diffs.
+pkg=patch-2.5.9
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=gzip-1.2.4
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=tar-1.12
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=sed-4.0.9
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=bzip2-1.0.8
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+pkg=coreutils-5.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# dash: the first shell, installed only in its store prefix (no /bin/sh; the
+# shell phase reaches it via CONFIG_SHELL). See dash-0.5.12/kaem.run.
+pkg=dash-0.5.12
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
+# --- 4. the shell phase ---------------------------------------------------------
+# The base is complete: PATH now holds every kaem-phase prefix (newest first)
+# over the seed prefixes -- exactly the PATH floor shpack composes build PATHs
+# on. Hand over to shpack on the store dash (there is no /bin/sh), with the
+# whole configuration in the environment: ROOT STORE DISTFILES BUILDDIR ARCH
+# BASEPATH [JOBS]. `shpack install gcc` by default; COMMAND=shell drops into
+# an interactive dash with shpack on hand (see shpack.conf.example).
+BASEPATH=${PATH}
+# Kaem-phase-only variables must not reach the shell phase: Makefiles honour
+# LIBDIR/BINDIR from the environment (zstd's `LIBDIR ?=` broke on it).
+unset ARCH_DIR BINDIR BOOT INCDIR LIBC_PREFIX LIBDIR M2 MESR pkg PKG PREFIX S0 SEEDDIR T
+exec ${STORE}/dash-0.5.12/bin/sh ${ROOT}/shpack/bin/shpack ${COMMAND} ${SPEC}

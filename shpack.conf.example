@@ -22,6 +22,8 @@
 #JOBS=8
 
 # What to run once the base is built: `shpack COMMAND SPEC` on the store dash.
-# COMMAND=shell instead drops into an interactive dash with `shpack` on hand.
+# COMMAND=shell instead drops into an interactive dash with `shpack` on hand;
+# COMMAND=seed stops after the seed (stage0 tools, tcc 0.9.27, musl 1.1.24),
+# building neither the rest of the base nor running shpack.
 #COMMAND=install
 #SPEC=gcc

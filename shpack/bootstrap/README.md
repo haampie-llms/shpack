@@ -41,9 +41,7 @@ Each directory holds:
   upstream tarball(s); `kaem.run` checks them first thing after `cd ${DISTFILES}`.
 - package assets (`files/`, `patches/`, `mk/`, `simple-patches/`, the musl
   per-arch trees, ...) referenced as `${PKG}/...`. Some makefiles and patches
-  originate from live-bootstrap. A store path a fragment needs at build time
-  (`musl-1.1.24/shpack-shell/*.after`) is carried as a `@STORE@` token and
-  instantiated in-chain with mescc-tools-extra `replace`.
+  originate from live-bootstrap.
 
 Environment contract (set in `start.kaem`, inherited by every `kaem.run`):
 
