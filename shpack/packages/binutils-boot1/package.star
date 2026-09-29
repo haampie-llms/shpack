@@ -28,7 +28,7 @@ depends_on("diffutils", type = "build")
 depends_on("sed@4.9-musl", type = "build")
 depends_on("tar@1.35-musl", type = "build")
 depends_on("findutils", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def setup_build_environment(ctx):
     # Generated parsers ship and no flex exists; preseed to short-circuit

@@ -13,15 +13,14 @@ version(
 
 build_system("autotools")
 
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 depends_on("gmake", type = "build")
 depends_on("binutils-boot0", type = "build")
 depends_on("m4", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def configure_args(ctx):
     # --build/--host=none-... forces GMP into generic-C mode: no hand-written

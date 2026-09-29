@@ -60,7 +60,7 @@ when("@=5.3.1", [
     depends_on("xz@5.2.5-musl", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("dash@0.5.12", type = "build"),
+    depends_on("dash-boot", type = "build"),
 ])
 
 def edit(ctx):

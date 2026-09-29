@@ -18,11 +18,10 @@ version(
 
 build_system("autotools")
 
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def configure_args(ctx):
     # No binutils ar yet and config.guess cannot probe this environment: pin the

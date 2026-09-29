@@ -26,7 +26,7 @@ depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 def install(ctx):
     # Linux ARCH uses its own arch names: aarch64 -> arm64 (selects the arm64

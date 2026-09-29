@@ -44,10 +44,11 @@ depends_on("tar@1.35-musl", type = "build")
 depends_on("xz@5.2.5-musl", type = "build")
 # glibc bakes a dash into its shipped scripts (ldd, mtrace, ...). 2.43 ships the
 # clean dash; 2.43-boot breaks the dash->glibc cycle, so it uses the bootstrap
-# dash@0.5.12 external (a leaf, hence no cycle). $sh follows whichever is declared.
+# dash (dash-boot, built by the kaem phase, hence no cycle). $sh follows whichever is
+# declared.
 depends_on("findutils", type = "build")
 depends_on("dash", when = "@=2.43", type = "build")
-depends_on("dash@0.5.12", when = "@=2.43-boot", type = "build")
+depends_on("dash-boot", when = "@=2.43-boot", type = "build")
 
 def install(ctx):
     headers = ctx.dep("linux-headers").prefix

@@ -218,6 +218,28 @@ do_finalize() {
     [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
 }
 
+# cmd_register_one -- a node the kaem phase installed (its recipe's
+# kaem-steps): the prefix is there, so it only gets its metadata, as a build's
+# finalize writes it; .spack/spec.json marks it installed.
+cmd_register_one() {
+    if [ $# -ne 1 ]; then die "usage: shpack register-one <id>"; fi
+    id=$1
+    SPEC=$VAR/spec/$id
+    [ "$(cat "$SPEC/kind")" = kaem ] || die "node '$id' is not the kaem phase's"
+    name=$(cat "$SPEC/name")
+    PREFIX=$(cat "$SPEC/prefix")
+    [ -d "$PREFIX" ] || die "$id: the kaem phase did not install $PREFIX"
+    # Modes as a build's finalize leaves them (the kaem phase's follow the
+    # umask, and the mescc-tools cp makes 0600 files).
+    chmod -R u=rwX,go=rX "$PREFIX"
+    mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
+    rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
+    cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
+    cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
+    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
+    echo "==> $id: registered $PREFIX"
+}
+
 cmd_build_one() {
     if [ $# -ne 1 ]; then die "usage: shpack build-one <id>"; fi
     id=$1
@@ -248,18 +270,16 @@ cmd_build_one() {
     BUILD_HOME=$VAR/home
     mkdir -p "$BUILD_HOME"
     # $sh, the build shell (configure/patch-shebangs/ctx.sh/SHELL=), is
-    # the dash the recipe declares -- dash@0.5.12 (bootstrap external) below the
+    # the dash the recipe declares -- dash-boot (the kaem phase's) below the
     # glibc dash, the clean dash above it. Every built recipe must declare one:
     # the build always runs make/patch-shebangs, so there is no shell-free build,
     # and an explicit dep keeps the shell inside the node's recorded closure.
-    # (The dash recipe itself takes its shell from dash-boot, the same
-    # bootstrap dash under a name of its own.)
     if direct_dep dash; then
         sh=$(prefix_of dash)/bin/sh
     elif direct_dep dash-boot; then
         sh=$(prefix_of dash-boot)/bin/sh
     else
-        die "$name declares no shell dependency (add depends_on(\"dash\") or \"dash@0.5.12\")"
+        die "$name declares no shell dependency (add depends_on(\"dash\") or \"dash-boot\")"
     fi
     SHELL=$sh
     # SHELL via MAKEFLAGS so it reaches recursive sub-makes and overrides even a

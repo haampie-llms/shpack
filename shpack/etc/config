@@ -12,9 +12,10 @@
 # top make that runs `shpack build-one` per node). It exists from the first kaem
 # package on. Per-build shells are not taken from here: every built recipe
 # declares its own dash dep and the builder's $sh follows it -- `depends_on dash`
-# for the clean glibc dash, `depends_on dash@0.5.12` for this bootstrap one (an
-# external). There is no /bin/sh anywhere, so this is an absolute store path.
-CONFIG_SHELL=${CONFIG_SHELL:-$STORE/dash-0.5.12/bin/sh}
+# for the clean glibc dash, `depends_on dash-boot` for this bootstrap one (built
+# by the kaem phase). There is no /bin/sh anywhere, so this is an absolute store
+# path.
+CONFIG_SHELL=${CONFIG_SHELL:-$STORE/dash-boot-0.5.12/bin/sh}
 
 # When this spec occurs in a DAG, shpack builds it first, serially, under the
 # bootstrap-era make (3.82, whose -j has races), then schedules the rest -jN

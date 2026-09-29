@@ -52,7 +52,7 @@ when("@=1.35-musl", [
     depends_on("gawk-boot", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("dash@0.5.12", type = "build"),
+    depends_on("dash-boot", type = "build"),
 ])
 
 def setup_build_environment(ctx):

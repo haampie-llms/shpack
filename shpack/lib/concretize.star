@@ -127,6 +127,20 @@ def concretize(host, cfg, specs):
     def versions(rec):
         return [d for d in rec["directives"] if d["directive"] == "version"]
 
+    kaem = {}
+    def kaem_steps(name):
+        """VERSION -> [STEP, INPUT...] from the recipe's kaem-steps: the versions
+        the kaem phase installs (at $STORE/<name>-<version>), the step that
+        builds each (shpack/bootstrap/STEP, or the seed) and the tree paths it
+        reads, which the package text covers."""
+        if name not in kaem:
+            kaem[name] = {}
+            for line in (host.read("%s/%s/kaem-steps" % (cfg["repo"], name)) or "").split("\n"):
+                f = line.split()
+                if f and not f[0].startswith("#"):
+                    kaem[name][f[0]] = f[1:]
+        return kaem[name]
+
     def resolve(spec):
         name, at, want = spec.partition("@")
         rec = None if name in unbuildable else record(name)
@@ -134,8 +148,12 @@ def concretize(host, cfg, specs):
             for d in versions(rec):
                 if at and d["version"] != want:
                     continue
-                return struct(id = name + "-" + d["version"], name = name, version = d["version"],
-                              kind = "built", prefix = None)
+                id = name + "-" + d["version"]
+                if d["version"] in kaem_steps(name):
+                    return struct(id = id, name = name, version = d["version"], kind = "kaem",
+                                  prefix = store + "/" + id)
+                return struct(id = id, name = name, version = d["version"], kind = "built",
+                              prefix = None)
         for ename, eprefix in externals:
             if ename.partition("@")[0] != name:
                 continue
@@ -155,7 +173,7 @@ def concretize(host, cfg, specs):
     def start(r):
         """A stack frame for the resolved node r, with its dependency list."""
         deps = []
-        if r.kind == "built" and record(r.name):
+        if r.kind != "external" and record(r.name):
             for d in record(r.name)["directives"]:
                 if d["directive"] == "depends_on" and _when_matches(d["when"], r.version):
                     deps.append((",".join(d["type"]), d["spec"]))
@@ -187,7 +205,8 @@ def concretize(host, cfg, specs):
                     for c in [depid] + dep["exec"]:
                         _add(n["path"], c)
             n["closure"] = sorted({c: None for c in closure}.keys())
-            n["recipe"] = build_inputs(r)
+            if r.kind == "built":
+                n["recipe"] = build_inputs(r)
         # The hash is Spack's DAG hash of the node as Spack records it: the
         # base32 SHA-1 of its JSON, which holds the dependencies' hashes and the
         # package hash (package_hash). A Spack with this repository (and the
@@ -199,8 +218,9 @@ def concretize(host, cfg, specs):
         n["hash"] = n["spack_hash"][:7]
         node["hash"] = n["spack_hash"]
         n["spack"] = host.json(node)
-        # Spack's default layout, {platform}-{target}/{name}-{version}-{hash}.
-        n["prefix"] = r.prefix if r.kind == "external" else "%s/linux-%s/%s-%s" % (
+        # Spack's default layout, {platform}-{target}/{name}-{version}-{hash};
+        # the kaem phase's packages are unhashed, {name}-{version}.
+        n["prefix"] = r.prefix if r.kind != "built" else "%s/linux-%s/%s-%s" % (
             store, _TARGETS.get(cfg["arch"], cfg["arch"]), r.id, n["spack_hash"])
         nodes[r.id] = n
         active.pop(r.id)
@@ -294,6 +314,22 @@ def concretize(host, cfg, specs):
         out += ["source %s %s" % (sha, fname) for sha, fname, _ in sources(r)]
         for path, sha in host.files(r.name):
             out.append("file %s %s" % (sha, path))
+        # A kaem step also depends on the tree it runs: its bootstrap step, and
+        # for the seed stage0 and vendor/, by content, as "input SHA PATH".
+        # "!PATH" leaves out what is under PATH (the seed's own build outputs).
+        root = cfg["repo"] + "/../.."
+        inputs = kaem_steps(r.name).get(r.version, [])[1:]
+        skip = [p[1:] + "/" for p in inputs if p.startswith("!")]
+        for path in inputs:
+            if path.startswith("!"):
+                continue
+            if host.list(root + "/" + path) == None:
+                out.append("input %s %s" % (host.sha256_file(root + "/" + path), path))
+                continue
+            for rel, sha in host.files("../../" + path):
+                full = path + "/" + rel
+                if not [s for s in skip if full.startswith(s)]:
+                    out.append("input %s %s" % (sha, full))
         # A Starlark recipe also depends on the evaluator and on every module
         # it loads (build systems, helpers), by content.
         out.append("evaluator " + host.star_version)
@@ -349,7 +385,7 @@ def concretize(host, cfg, specs):
         # The node as Spack sees it, for the database (spackdb.star); and, for
         # a built node, the prefix's .spack/spec.json: it and its closure.
         files[d + "spack.json"] = n["spack"] + "\n"
-        if n["kind"] == "built":
+        if n["kind"] != "external":
             ids = [id] + n["closure"]
             files[d + "spack-spec.json"] = (
                 '{"spec": {"_meta": {"version": 6}, "nodes": [' +
@@ -358,7 +394,7 @@ def concretize(host, cfg, specs):
                                                  nodes[id]["hash"], nodes[id]["kind"],
                                                  nodes[id]["prefix"]) for id in topo])
     for id in roots:
-        if nodes[id]["kind"] == "built":
+        if nodes[id]["kind"] != "external":
             files["spec/" + id + "/explicit"] = ""   # as `spack install` marks its roots
     files["dag.mk"] = dagmk(cfg, nodes, topo, roots, compose_path)
     out = tree(nodes, roots)
@@ -397,16 +433,25 @@ def dagmk(cfg, nodes, topo, roots, compose_path):
     out.append("")
     out.append(".PHONY: all")
     out.append("all:" + "".join([" $(S)/" + _stamp(nodes, id) for id in roots
-                                 if nodes[id]["kind"] == "built"]))
+                                 if nodes[id]["kind"] != "external"]))
     out.append("")
     for id in topo:
         n = nodes[id]
-        if n["kind"] != "built":
+        if n["kind"] == "external":
             continue
         prefix = n["prefix"]
         out.append("$(S)/%s:" % _stamp(nodes, id) +
                    "".join([" $(S)/" + _stamp(nodes, d) for d in n["deps"]
-                            if nodes[d]["kind"] == "built"]))
+                            if nodes[d]["kind"] != "external"]))
+        if n["kind"] == "kaem":
+            # installed by the kaem phase: only its metadata goes in
+            out.append("\t@%s %s/bin/shpack register-one %s >$(L)/%s.log 2>&1 \\" %
+                       ("$(SHELL)", cfg["shpack_root"], id, id))
+            out.append('\t  || { echo "!! %s FAILED, tail of $(L)/%s.log:"; tail -n 40 $(L)/%s.log; exit 1; }' %
+                       (id, id, id))
+            out.append("\t@touch $@")
+            out.append("")
+            continue
         # The sandbox needs the prefix to exist before it can grant write to
         # it; $(V) grants the whole scratch. The log redirect, touch and cp run
         # outside the wrapper.

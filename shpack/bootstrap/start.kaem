@@ -36,49 +36,57 @@ BUILDDIR=${ROOT}/tmp
 COMMAND=install
 SPEC=gcc
 include-optional ${ROOT}/shpack.conf
+# the seed's prefix: tcc 0.9.27 in Spack's {name}-{version} projection
+SEED=${STORE}/tcc-0.9.27
 
 TMPDIR=${BUILDDIR}
 HOME=${BUILDDIR}/home
 TERM=dumb
 
 # --- 2. the seed layer ----------------------------------------------------------
+# The seed is one package, tcc 0.9.27 (packages/tcc), in one prefix ${SEED}:
+# tcc 0.9.26 installs its libc into musl's prefix, musl is rebuilt in place and
+# tcc 0.9.27 bakes that prefix in, so they cannot be separate packages. musl and
+# tcc 0.9.27 are ${SEED} itself (bin/tcc, lib/, include/); the steps before them
+# get sub-prefixes ${SEED}/<name-version>, off the PATH of what depends on tcc
+# (the mescc-tools cp, rm, mkdir, ... would shadow coreutils').
+#
 # stage0-posix left every tool in ${SEEDDIR}/${ARCH_DIR}/bin. Install them into
-# per-package store prefixes (a Spack-style store, like every other package in
-# this build), by upstream package + version. Explicit paths until PATH is set.
+# sub-prefixes by upstream package + version. Explicit paths until PATH is set.
 S0=${SEEDDIR}/${ARCH_DIR}/bin
 T=${BUILDDIR}/stage0
-${S0}/mkdir -p ${STORE}/mescc-tools-1.7.0/bin
-${S0}/mkdir -p ${STORE}/mescc-tools-extra-1.4.0/bin
-${S0}/mkdir -p ${STORE}/M2-Mesoplanet-1.13.0/bin
-${S0}/mkdir -p ${STORE}/tcc_cc/bin
-${S0}/mkdir -p ${STORE}/stack_c/bin
+${S0}/mkdir -p ${SEED}/mescc-tools-1.7.0/bin
+${S0}/mkdir -p ${SEED}/mescc-tools-extra-1.4.0/bin
+${S0}/mkdir -p ${SEED}/M2-Mesoplanet-1.13.0/bin
+${S0}/mkdir -p ${SEED}/tcc_cc/bin
+${S0}/mkdir -p ${SEED}/stack_c/bin
 ${S0}/mkdir -p ${T}
 ${S0}/mkdir -p ${HOME}
 
 # mescc-tools 1.7.0 -- kaem is shpack's build (seed/after.kaem), not upstream's.
-${S0}/cp ${S0}/blood-elf     ${STORE}/mescc-tools-1.7.0/bin/blood-elf
-${S0}/cp ${S0}/M1            ${STORE}/mescc-tools-1.7.0/bin/M1
-${S0}/cp ${S0}/hex2          ${STORE}/mescc-tools-1.7.0/bin/hex2
-${S0}/cp ${SEEDDIR}/${ARCH_DIR}/artifact/shpack-kaem/kaem ${STORE}/mescc-tools-1.7.0/bin/kaem
-${S0}/cp ${S0}/catm          ${STORE}/mescc-tools-1.7.0/bin/catm
-${S0}/cp ${S0}/match         ${STORE}/mescc-tools-1.7.0/bin/match
-${S0}/cp ${S0}/mkdir         ${STORE}/mescc-tools-1.7.0/bin/mkdir
-${S0}/cp ${S0}/cp            ${STORE}/mescc-tools-1.7.0/bin/cp
-${S0}/cp ${S0}/chmod         ${STORE}/mescc-tools-1.7.0/bin/chmod
-${S0}/cp ${S0}/rm            ${STORE}/mescc-tools-1.7.0/bin/rm
-${S0}/cp ${S0}/sha256sum     ${STORE}/mescc-tools-1.7.0/bin/sha256sum
+${S0}/cp ${S0}/blood-elf     ${SEED}/mescc-tools-1.7.0/bin/blood-elf
+${S0}/cp ${S0}/M1            ${SEED}/mescc-tools-1.7.0/bin/M1
+${S0}/cp ${S0}/hex2          ${SEED}/mescc-tools-1.7.0/bin/hex2
+${S0}/cp ${SEEDDIR}/${ARCH_DIR}/artifact/shpack-kaem/kaem ${SEED}/mescc-tools-1.7.0/bin/kaem
+${S0}/cp ${S0}/catm          ${SEED}/mescc-tools-1.7.0/bin/catm
+${S0}/cp ${S0}/match         ${SEED}/mescc-tools-1.7.0/bin/match
+${S0}/cp ${S0}/mkdir         ${SEED}/mescc-tools-1.7.0/bin/mkdir
+${S0}/cp ${S0}/cp            ${SEED}/mescc-tools-1.7.0/bin/cp
+${S0}/cp ${S0}/chmod         ${SEED}/mescc-tools-1.7.0/bin/chmod
+${S0}/cp ${S0}/rm            ${SEED}/mescc-tools-1.7.0/bin/rm
+${S0}/cp ${S0}/sha256sum     ${SEED}/mescc-tools-1.7.0/bin/sha256sum
 # mescc-tools-extra 1.4.0
-${S0}/cp ${S0}/ungz          ${STORE}/mescc-tools-extra-1.4.0/bin/ungz
-${S0}/cp ${S0}/unbz2         ${STORE}/mescc-tools-extra-1.4.0/bin/unbz2
-${S0}/cp ${S0}/unxz          ${STORE}/mescc-tools-extra-1.4.0/bin/unxz
-${S0}/cp ${S0}/untar         ${STORE}/mescc-tools-extra-1.4.0/bin/untar
-${S0}/cp ${S0}/replace       ${STORE}/mescc-tools-extra-1.4.0/bin/replace
+${S0}/cp ${S0}/ungz          ${SEED}/mescc-tools-extra-1.4.0/bin/ungz
+${S0}/cp ${S0}/unbz2         ${SEED}/mescc-tools-extra-1.4.0/bin/unbz2
+${S0}/cp ${S0}/unxz          ${SEED}/mescc-tools-extra-1.4.0/bin/unxz
+${S0}/cp ${S0}/untar         ${SEED}/mescc-tools-extra-1.4.0/bin/untar
+${S0}/cp ${S0}/replace       ${SEED}/mescc-tools-extra-1.4.0/bin/replace
 # M2-Mesoplanet 1.13.0
-${S0}/cp ${S0}/M2-Mesoplanet ${STORE}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
+${S0}/cp ${S0}/M2-Mesoplanet ${SEED}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
 
 # mescc-tools cp uses fopen(dest,"w") and does not preserve the execute bit,
 # so the copies land at 0600. Make them executable.
-${S0}/chmod 755 ${STORE}/mescc-tools-1.7.0/bin/blood-elf ${STORE}/mescc-tools-1.7.0/bin/M1 ${STORE}/mescc-tools-1.7.0/bin/hex2 ${STORE}/mescc-tools-1.7.0/bin/kaem ${STORE}/mescc-tools-1.7.0/bin/catm ${STORE}/mescc-tools-1.7.0/bin/match ${STORE}/mescc-tools-1.7.0/bin/mkdir ${STORE}/mescc-tools-1.7.0/bin/cp ${STORE}/mescc-tools-1.7.0/bin/chmod ${STORE}/mescc-tools-1.7.0/bin/rm ${STORE}/mescc-tools-1.7.0/bin/sha256sum ${STORE}/mescc-tools-extra-1.4.0/bin/ungz ${STORE}/mescc-tools-extra-1.4.0/bin/unbz2 ${STORE}/mescc-tools-extra-1.4.0/bin/unxz ${STORE}/mescc-tools-extra-1.4.0/bin/untar ${STORE}/mescc-tools-extra-1.4.0/bin/replace ${STORE}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
+${S0}/chmod 755 ${SEED}/mescc-tools-1.7.0/bin/blood-elf ${SEED}/mescc-tools-1.7.0/bin/M1 ${SEED}/mescc-tools-1.7.0/bin/hex2 ${SEED}/mescc-tools-1.7.0/bin/kaem ${SEED}/mescc-tools-1.7.0/bin/catm ${SEED}/mescc-tools-1.7.0/bin/match ${SEED}/mescc-tools-1.7.0/bin/mkdir ${SEED}/mescc-tools-1.7.0/bin/cp ${SEED}/mescc-tools-1.7.0/bin/chmod ${SEED}/mescc-tools-1.7.0/bin/rm ${SEED}/mescc-tools-1.7.0/bin/sha256sum ${SEED}/mescc-tools-extra-1.4.0/bin/ungz ${SEED}/mescc-tools-extra-1.4.0/bin/unbz2 ${SEED}/mescc-tools-extra-1.4.0/bin/unxz ${SEED}/mescc-tools-extra-1.4.0/bin/untar ${SEED}/mescc-tools-extra-1.4.0/bin/replace ${SEED}/M2-Mesoplanet-1.13.0/bin/M2-Mesoplanet
 
 # MES-replacement: stack_c (stack-IR -> asm transpiler) from C source with
 # M2-Planet, then tcc_cc (the seed C compiler) assembled from its committed
@@ -87,23 +95,23 @@ M2=${SEEDDIR}/M2libc
 ${S0}/M2-Planet --architecture ${ARCH} -f ${M2}/sys/types.h -f ${M2}/stddef.h -f ${M2}/${ARCH}/linux/fcntl.c -f ${M2}/fcntl.c -f ${M2}/${ARCH}/linux/unistd.c -f ${M2}/${ARCH}/linux/sys/stat.c -f ${M2}/ctype.c -f ${M2}/stdlib.c -f ${M2}/stdarg.h -f ${M2}/stdio.h -f ${M2}/stdio.c -f ${M2}/string.c -f ${M2}/bootstrappable.c -f ${MESR}/stack_c_${ARCH}.c --debug -o ${T}/stack_c.M1
 ${S0}/blood-elf --64 --little-endian -f ${T}/stack_c.M1 -o ${T}/stack_c-footer.M1
 ${S0}/M1 --architecture ${ARCH} --little-endian -f ${M2}/${ARCH}/${ARCH}_defs.M1 -f ${M2}/${ARCH}/libc-full.M1 -f ${T}/stack_c.M1 -f ${T}/stack_c-footer.M1 -o ${T}/stack_c.hex2
-${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/stack_c.hex2 -o ${STORE}/stack_c/bin/stack_c
+${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/stack_c.hex2 -o ${SEED}/stack_c/bin/stack_c
 
-${STORE}/stack_c/bin/stack_c -i ${MESR}/stack_c_intro_${ARCH}.M1 ${MESR}/tcc_cc.${ARCH}.sl64 -o ${T}/tcc_cc.M1
+${SEED}/stack_c/bin/stack_c -i ${MESR}/stack_c_intro_${ARCH}.M1 ${MESR}/tcc_cc.${ARCH}.sl64 -o ${T}/tcc_cc.M1
 ${S0}/blood-elf --64 --little-endian -f ${T}/tcc_cc.M1 -o ${T}/tcc_cc-footer.M1
 ${S0}/M1 --architecture ${ARCH} --little-endian -f ${T}/tcc_cc.M1 -f ${T}/tcc_cc-footer.M1 -o ${T}/tcc_cc.hex2
-${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/tcc_cc.hex2 -o ${STORE}/tcc_cc/bin/tcc_cc
+${S0}/hex2 --architecture ${ARCH} --little-endian --base-address 0x00600000 -f ${M2}/${ARCH}/ELF-${ARCH}-debug.hex2 -f ${T}/tcc_cc.hex2 -o ${SEED}/tcc_cc/bin/tcc_cc
 
 # From here on tools are found by bare name: PATH is the seed prefixes, and
 # grows one store prefix per package below (the composition rule shpack keeps).
-PATH=${STORE}/mescc-tools-1.7.0/bin:${STORE}/mescc-tools-extra-1.4.0/bin:${STORE}/M2-Mesoplanet-1.13.0/bin:${STORE}/tcc_cc/bin:${STORE}/stack_c/bin
+PATH=${SEED}/mescc-tools-1.7.0/bin:${SEED}/mescc-tools-extra-1.4.0/bin:${SEED}/M2-Mesoplanet-1.13.0/bin:${SEED}/tcc_cc/bin:${SEED}/stack_c/bin
 
 # Verify self-hosting: tcc_cc rebuilds its own committed sl64 byte-for-byte
 # (sha256-pinned). This also covers stack_c, which assembled tcc_cc.
 kaem --verbose --strict --file ${BOOT}/check-tools.kaem
 
 # --- 3. the package chain -------------------------------------------------------
-# Per package: install prefix ${STORE}/<name-version>, one PATH prepend, one
+# Per package: install prefix ${SEED}/<name-version>, one PATH prepend, one
 # child kaem running ${BOOT}/<name-version>/kaem.run. The scripts build in
 # ${TMPDIR}/build/<name-version> and reference their inputs absolutely:
 # ${DISTFILES} (tarballs, checked first thing against sources.sha256), ${PKG}
@@ -113,14 +121,14 @@ kaem --verbose --strict --file ${BOOT}/check-tools.kaem
 # The libc's own store prefix. Expanded once here (not derived from any
 # package's PREFIX): tcc bakes LIBDIR/INCDIR in as its crt-prefix and
 # sysinclude path, and binutils/gcc later point their sysroot here.
-LIBC_PREFIX=${STORE}/musl-1.1.24
-LIBDIR=${STORE}/musl-1.1.24/lib
-INCDIR=${STORE}/musl-1.1.24/include
+LIBC_PREFIX=${SEED}
+LIBDIR=${SEED}/lib
+INCDIR=${SEED}/include
 
 # simple-patch: exact-match patcher, used until GNU patch exists.
 pkg=simple-patch-1.0
 PKG=${BOOT}/${pkg}
-PREFIX=${STORE}/${pkg}
+PREFIX=${SEED}/${pkg}
 BINDIR=${PREFIX}/bin
 mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
@@ -129,7 +137,7 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # tcc 0.9.26: the seed-grown C compiler, plus the bring-up subset musl.
 pkg=tcc-0.9.26
 PKG=${BOOT}/${pkg}
-PREFIX=${STORE}/${pkg}
+PREFIX=${SEED}/${pkg}
 BINDIR=${PREFIX}/bin
 mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
@@ -139,7 +147,7 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # precede tcc-0.9.27, which statically links the strtod of the libc it sees).
 pkg=musl-1.1.24
 PKG=${BOOT}/${pkg}
-PREFIX=${STORE}/${pkg}
+PREFIX=${SEED}
 BINDIR=${PREFIX}/bin
 mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
@@ -148,7 +156,7 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # tcc 0.9.27: the production compiler for the rest of the bootstrap.
 pkg=tcc-0.9.27
 PKG=${BOOT}/${pkg}
-PREFIX=${STORE}/${pkg}
+PREFIX=${SEED}
 BINDIR=${PREFIX}/bin
 mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
@@ -170,7 +178,7 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # full musl's strtod to link) forces the first pass to exist; this one heals it.
 pkg=musl-1.1.24
 PKG=${BOOT}/${pkg}
-PREFIX=${STORE}/${pkg}
+PREFIX=${SEED}
 BINDIR=${PREFIX}/bin
 mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
@@ -180,6 +188,10 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # nothing with what follows but PATH and LIBC_PREFIX. COMMAND=seed stops here
 # (the unit a package manager installs as one package, e.g. Spack); otherwise
 # base.kaem builds the rest of the base and hands over to shpack.
+# What the seed puts on the PATH of the steps after it, newest first (Spack's
+# adapter reads the same file to build them).
+include ${BOOT}/seed.path
+
 if match ${COMMAND} seed; then
     # done
 else

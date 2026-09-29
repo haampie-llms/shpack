@@ -37,10 +37,8 @@ repo reuses them. Three things have to agree:
 - **`build_system` is `generic`.** The adapter declares no build system (the
   plan carries it), so any other value is not one the package has.
 - **Every node's package exists in the repo.** A node Spack cannot load is
-  not reusable, and neither is anything that depends on it. The kaem-phase
-  seeds without a recipe of their own (`tcc`, `dash-boot`, `star`) have
-  version-only stubs, which shpack ignores (`buildable=false` in
-  `etc/externals`).
+  not reusable, and neither is anything that depends on it. The kaem phase's
+  packages are recipes (`kaem-steps`), so there are no externals.
 
 ## Same hashes
 
@@ -53,11 +51,18 @@ requires `os=shpack`, an OS the adapter registers on the host platform, as
 shpack records it. So `spack spec --fresh gcc-boot0` gives shpack's hashes,
 and Spack installs where shpack does.
 
-Checked in the VM up to gcc-boot0, with the kaem-phase prefixes as externals
-(`os=shpack`) and shpack's base environment (`SPACK_STAR_BASE_ENV`): Spack's
-build of the 11 recipes, in its own stage directories, is byte-identical to
-shpack's (`.spack/` aside). Stage paths do not reach these prefixes: shpack
-builds with two different `BUILDDIR`s are identical too.
+## The kaem phase
+
+A version listed in its recipe's `kaem-steps` is built by the adapter the way
+shpack's kaem phase builds it (`_kaem_install`): the seed, `tcc@0.9.27`, by the
+stage0 seed itself on a copy of the tree (`COMMAND=seed`), any other step by
+its `kaem.run` under the kaem phase's environment contract, with the step's
+archives unexpanded in a DISTFILES directory and PATH composed as start.kaem
+composes it (the step, the steps before it newest first, `seed.path`). They
+install unhashed: Spack needs `{name}-{version}` projections for them in
+`config:install_tree:projections`. The shell phase's base environment
+(`SPACK_STAR_BASE_ENV`) holds BASEPATH, the kaem steps' bins newest first and
+then `seed.path`.
 
 ## Status
 

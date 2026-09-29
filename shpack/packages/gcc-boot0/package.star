@@ -27,15 +27,14 @@ depends_on("gmake", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tcc", type = "build")
-depends_on("musl@1.1.24")
+depends_on("tcc", type = ("build", "link"))
 depends_on("binutils-boot0", type = ("build", "run"))
 depends_on("gmp")
 depends_on("mpfr")
 depends_on("mpc")
 depends_on("m4", type = "build")
 depends_on("gawk-boot", type = "build")
-depends_on("dash@0.5.12", type = "build")
+depends_on("dash-boot", type = "build")
 
 # libiberty's C_alloca conflicts with musl's alloca; rename it (same fix as Guix).
 patch("0001-alloca.patch")
@@ -96,7 +95,7 @@ def configure_args(ctx):
         "CXX=tcc",
         "CXXCPP=tcc -E",
         "CFLAGS=-DHAVE_ALLOCA_H",
-        "--with-sysroot=" + ctx.dep("musl").prefix,
+        "--with-sysroot=" + ctx.dep("tcc").prefix,
         "--with-native-system-header-dir=/include",
         "--with-gmp=" + ctx.dep("gmp").prefix,
         "--with-mpfr=" + ctx.dep("mpfr").prefix,

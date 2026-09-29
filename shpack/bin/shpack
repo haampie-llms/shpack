@@ -99,6 +99,7 @@ usage: shpack <command> [args]
                         indented tree (each node once, indent = depth)
   build-one <id>        build a single concretized node (internal; invoked
                         from dag.mk recipes)
+  register-one <id>     record a node the kaem phase installed (internal)
   env <name|id>         print the composed build environment of a node
   find                  list concretized/installed packages
   spack-db              rewrite \$STORE/.spack-db/index.json from the store, so
@@ -126,6 +127,7 @@ case $cmd in
     concretize)     cmd_concretize "$@" ;;
     spec)           cmd_spec "$@" ;;
     build-one)      cmd_build_one "$@" ;;
+    register-one)   cmd_register_one "$@" ;;
     env)            cmd_env "$@" ;;
     find)           cmd_find "$@" ;;
     spack-db)       cmd_spack_db "$@" ;;
