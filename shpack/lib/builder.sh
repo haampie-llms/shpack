@@ -99,12 +99,12 @@ runs() {
     done < "$VAR/spec/$1/edges"
 }
 
-# seed_path PREFIX -> bootstrap/seed.path's PATH, with ${SEED} as PREFIX.
+# seed_path PREFIX -> bootstrap/seed.path's SEEDPATH, with ${SEED} as PREFIX.
 seed_path() {
     local line out
     while read -r line; do
         case $line in
-            PATH=*) line=${line#PATH=} ;;
+            SEEDPATH=*) line=${line#SEEDPATH=} ;;
             *) continue ;;
         esac
         out=
@@ -119,7 +119,7 @@ seed_path() {
         printf '%s\n' "$out$line"
         return 0
     done < "$STAR_ROOT/bootstrap/seed.path"
-    die "seed.path has no PATH= line"
+    die "seed.path has no SEEDPATH= line"
 }
 
 # compose_env -- PATH, CONFIG_SHELL, STAR and PATCH_SHEBANGS of this build.
