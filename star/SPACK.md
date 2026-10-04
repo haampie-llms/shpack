@@ -62,10 +62,16 @@ composes it (the step, the steps before it newest first, `seed.path`). They
 install unhashed, by the `{name}-{version}` projections of the tree's
 `spack.yaml`.
 
-A shell-phase build's base PATH and `CONFIG_SHELL` are the kaem phase's as it
-hands over to shpack: those of its last step (the kaem-phase node in the DAG
-with all the others below it, dash-boot), i.e. the kaem steps' bins newest
-first, then `seed.path`, and dash-boot's `sh`.
+## Shell-phase builds
+
+Any other version is built by shpack's builder, `shpack-builder` in the store
+(a kaem step, which every DAG reaches through dash-boot), as shpack builds it:
+the adapter writes the concrete spec out as the builder's state files
+(`spec/<id>/` of the node and its closure, PROTOCOL.md, Hosts) and runs
+`dash-boot/bin/sh shpack-builder/bin/shpack-build ID`. The build's PATH, its
+base, the build shell, staging, patching, the plan (by `star`, from the DAG)
+and running it are the builder's, so the two hosts share them rather than
+agree on them.
 
 ## Staging and the sandbox
 

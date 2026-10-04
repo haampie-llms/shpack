@@ -1,0 +1,36 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# shpack-build ID -- build the concretized node ID into its prefix, for any
+# host: lib/builder.sh, which says what it reads. The kaem phase installs this
+# and the libraries next to it as the package shpack-builder, so a host runs
+# it from the store: `sh $STORE/shpack-builder-1.0/bin/shpack-build ID`.
+#
+# Environment: SHPACK_VAR (the state directory: spec/<id>/ of the node and
+# its closure, and the stage), SHPACK_REPO (the recipes), SHPACK_STAR_ROOT
+# (where load("//...") resolves), DISTFILES, ARCH, JOBS; optionally MAKEFLAGS
+# (a jobserver), TMPDIR, MIRRORS and SHPACK_KEEP_STAGE.
+
+set -e
+umask 022
+
+die() {
+    printf 'shpack-build: error: %s\n' "$*" >&2
+    exit 1
+}
+
+[ $# -eq 1 ] || die "usage: shpack-build ID"
+for v in SHPACK_VAR SHPACK_REPO SHPACK_STAR_ROOT DISTFILES ARCH JOBS; do
+    eval "val=\${$v:-}"
+    [ -n "$val" ] || die "$v is not set"
+done
+VAR=$SHPACK_VAR
+REPO=$SHPACK_REPO
+STAR_ROOT=$SHPACK_STAR_ROOT
+
+# the libraries sit next to bin/, in the tree as in the store
+lib=${0%/*}/../lib
+. "$lib/spec.sh"
+. "$lib/builder.sh"
+
+build_node "$1"

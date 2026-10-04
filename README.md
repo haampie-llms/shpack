@@ -314,10 +314,14 @@ sandboxed, and gives the same prefixes, byte for byte (star/SPACK.md).
 
 Concretization emits `dag.mk` (one stamp target per node, direct deps as
 prerequisites) and GNU make runs the DAG in parallel. Each build is its own
-process with a precomposed PATH: own prefix, then its build dependencies and
-what they run (Spack's rule, see [PROTOCOL.md](star/PROTOCOL.md)),
-most-derived-first, then `BASEPATH` (the kaem-phase base layer plus stage0 seed
-dirs). No runtime PATH composition, exactly one provider per tool. Logs are
+process, run by the builder (`shpack/lib/builder.sh`), which the kaem phase
+installs as the package `shpack-builder` so that every host builds with the
+same one: shpack's dag.mk and Spack's adapter both run it from the store on a
+node's state directory (`spec/<id>/`, and its closure's). It composes the
+build's PATH from the DAG: own prefix, then its build dependencies and what
+they run (Spack's rule, see [PROTOCOL.md](star/PROTOCOL.md)),
+most-derived-first, then the kaem-phase base layer (its nodes in the DAG,
+newest first) and the stage0 seed dirs. Exactly one provider per tool. Logs are
 per-package; a failure prints the log tail and stops. When the DAG contains
 `SHPACK_BOOTSTRAP_MAKE` (gmake@4.4.1), it is built first serially under the
 race-prone bootstrap make 3.82, and everything else runs `-j$JOBS` under the new
@@ -328,7 +332,7 @@ make's fifo jobserver.
 ```
 shpack install <spec>...     concretize + build (spec: name or name@version)
 shpack concretize <spec>...  resolve and emit dag.mk only
-shpack build-one <id>        build one node (internal, called from dag.mk)
+shpack build-one <id>        build one node with the store's builder (internal, called from dag.mk)
 shpack env <name|id>         print a node's composed environment
 shpack find                  list concretized/installed packages
 shpack spack-db              record the last concretization's installs in .spack-db

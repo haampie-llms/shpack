@@ -103,6 +103,15 @@ mkdir -p ${BINDIR}
 PATH=${BINDIR}:${PATH}
 kaem --verbose --strict --file ${PKG}/kaem.run
 
+# shpack-builder: the shell phase's builder, which every host runs from here.
+pkg=shpack-builder-1.0
+PKG=${BOOT}/${pkg}
+PREFIX=${STORE}/${pkg}
+BINDIR=${PREFIX}/bin
+mkdir -p ${BINDIR}
+PATH=${BINDIR}:${PATH}
+kaem --verbose --strict --file ${PKG}/kaem.run
+
 # dash: the first shell, installed only in its store prefix (no /bin/sh; the
 # shell phase reaches it via CONFIG_SHELL). See dash-0.5.12/kaem.run.
 pkg=dash-0.5.12

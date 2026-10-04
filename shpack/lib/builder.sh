@@ -1,28 +1,51 @@
 # SPDX-License-Identifier: MIT
 #
-# builder.sh -- build one concretized node in its own process.
+# builder.sh -- build one concretized node, for any host.
 #
-# Invoked from a dag.mk recipe as `shpack build-one <id>` with PATH already
-# composed from the node's dependency closure. The pipeline is:
+# The kaem phase installs this file with bin/shpack-build as the package
+# shpack-builder (shpack/bootstrap/shpack-builder-1.0), which every DAG reaches
+# through dash-boot: shpack's dag.mk and Spack's adapter both build a node by
+# running `sh $builder/bin/shpack-build ID` from the store, so there is one
+# builder, and its content is in every hash. Its input is the node's state
+# directory and its closure's (star/PROTOCOL.md, Hosts):
 #
+#   $SHPACK_VAR/spec/<id>/  for the node, and for every node of its closure
+#     name, prefix, kind (built|kaem|external), edges ("ID TYPES", recipe order)
+#     step              a kaem node's step (kaem-steps), "seed" for the seed
+#   and for the node itself, what concretization takes from the recipe:
+#     version, deps (direct ids), closure (sorted ids), sources, patches, parallel
+#
+# plus SHPACK_REPO, SHPACK_STAR_ROOT, DISTFILES, ARCH and JOBS in the
+# environment. Everything else -- PATH, the build shell, star, patch-shebangs
+# -- it derives from the DAG. The pipeline is:
+#
+#   compose  the build's environment from the DAG (compose_env)
 #   fetch    verify (and if curl exists, download) the distfiles
 #   stage    unpack into $VAR/stage/<id>, cd into the source directory
 #   patch    apply the recipe's declared patches
 #   plan     `star plan` evaluates the recipe's phases against this node's
 #            build context and renders the actions as $SPEC/build.sh
 #   <phases> source $SPEC/build.sh in this shell
-#   finalize write $PREFIX/.spack, Spack's metadata: spec.json, the recipe,
-#            and shpack's manifest and plan
+#   finalize drop .la files, normalize modes; the plan goes to .spack/
+
+# rd FILE -> the first line of FILE. A builtin read, not cat: the builder
+# reads the DAG before it has composed a PATH.
+rd() {
+    local l
+    l=
+    read -r l < "$1" || [ -n "$l" ] || return 0
+    printf '%s\n' "$l"
+}
 
 # prefix_of NAME -> the store prefix of a dependency (direct or transitive).
 prefix_of() {
     local d
-    for d in $(cat "$SPEC/deps") $(cat "$SPEC/closure"); do
-        if [ "$(cat "$VAR/spec/$d/name")" = "$1" ]; then
-            cat "$VAR/spec/$d/prefix"
+    while read -r d; do
+        if [ "$(rd "$VAR/spec/$d/name")" = "$1" ]; then
+            rd "$VAR/spec/$d/prefix"
             return 0
         fi
-    done
+    done < "$SPEC/deps.all"
     die "prefix_of: '$1' is not in the dependency closure of $id"
 }
 
@@ -33,10 +56,109 @@ prefix_of() {
 # true nearly everywhere and pick a dash the recipe never asked for.
 direct_dep() {
     local d
-    for d in $(cat "$SPEC/deps"); do
-        if [ "$(cat "$VAR/spec/$d/name")" = "$1" ]; then return 0; fi
-    done
+    while read -r d; do
+        if [ "$(rd "$VAR/spec/$d/name")" = "$1" ]; then return 0; fi
+    done < "$SPEC/deps"
     return 1
+}
+
+# --- the environment, from the DAG ---------------------------------------
+#
+# Spack's rule (star/PROTOCOL.md, Hosts): a build runs its direct build (and
+# test) dependencies, and what each of those runs -- its run dependencies,
+# found through run and link edges. They go on PATH in the reverse of a DFS
+# post-order over all declared edges, then the base: the kaem phase's PATH as
+# it hands over to the shell phase, i.e. the kaem-phase nodes of the closure
+# in that same order (every kaem step depends on the ones before it, so this
+# is the chain, newest first) and the seed's PATH (bootstrap/seed.path).
+
+# post_order ID -- append ID's dependencies to $ORDER (" ID ID ... "), each
+# after its own dependencies, first visit wins.
+post_order() {
+    local d t
+    while read -r d t; do
+        case $ORDER in
+            *" $d "*) continue ;;
+        esac
+        post_order "$d"
+        ORDER="$ORDER$d "
+    done < "$VAR/spec/$1/edges"
+}
+
+# runs ID -- add to $RUNS what a dependent may run through ID: its run
+# dependencies, and what its run and link dependencies run.
+runs() {
+    local d t
+    while read -r d t; do
+        case ,$t, in
+            *,run,*) RUNS="$RUNS$d " ;;
+        esac
+        case ,$t, in
+            *,run,*|*,link,*) runs "$d" ;;
+        esac
+    done < "$VAR/spec/$1/edges"
+}
+
+# seed_path PREFIX -> bootstrap/seed.path's PATH, with ${SEED} as PREFIX.
+seed_path() {
+    local line out
+    while read -r line; do
+        case $line in
+            PATH=*) line=${line#PATH=} ;;
+            *) continue ;;
+        esac
+        out=
+        while :; do
+            case $line in
+                *'${SEED}'*)
+                    out=$out${line%%'${SEED}'*}$1
+                    line=${line#*'${SEED}'} ;;
+                *) break ;;
+            esac
+        done
+        printf '%s\n' "$out$line"
+        return 0
+    done < "$STAR_ROOT/bootstrap/seed.path"
+    die "seed.path has no PATH= line"
+}
+
+# compose_env -- PATH, CONFIG_SHELL, STAR and PATCH_SHEBANGS of this build.
+# A host that has no kaem-phase nodes (the test fixture) passes the base as
+# $BASEPATH and its tools as $CONFIG_SHELL, $STAR and $PATCH_SHEBANGS.
+compose_env() {
+    local d t c p kind path base seed
+    ORDER=' '
+    post_order "$id"
+    RUNS=' '
+    while read -r d t; do
+        case ,$t, in
+            *,build,*|*,test,*) RUNS="$RUNS$d "; runs "$d" ;;
+        esac
+    done < "$SPEC/edges"
+    path= base= seed=
+    for c in $ORDER; do
+        p=$(rd "$VAR/spec/$c/prefix")
+        case $RUNS in
+            *" $c "*) path=$p/bin:$path ;;
+        esac
+        kind=$(rd "$VAR/spec/$c/kind")
+        if [ "$kind" = kaem ]; then
+            if [ "$(rd "$VAR/spec/$c/step")" = seed ]; then
+                seed=$p
+            else
+                base=$p/bin:$base
+            fi
+        fi
+    done
+    if [ -n "$seed" ]; then
+        base=$base$(seed_path "$seed")
+        CONFIG_SHELL=$(prefix_of dash-boot)/bin/sh
+        STAR=${STAR:-$(prefix_of star)/bin/star}
+        PATCH_SHEBANGS=${PATCH_SHEBANGS-$(prefix_of patch-shebangs)/bin/patch-shebangs}
+    else
+        base=$BASEPATH
+    fi
+    PATH=$PREFIX/bin:$path$base
 }
 
 # --- the plan ------------------------------------------------------------
@@ -111,14 +233,14 @@ write_ctx() {
     # (the prefix_of rule).
     printf '    "deps": {\n'
     seen=' '
-    for d in $(cat "$SPEC/deps") $(cat "$SPEC/closure"); do
-        dn=$(cat "$VAR/spec/$d/name")
+    while read -r d; do
+        dn=$(rd "$VAR/spec/$d/name")
         case $seen in
             *" $dn "*) continue ;;
         esac
         seen="$seen$dn "
-        printf '        %s: %s,\n' "$(star_str "$dn")" "$(star_str "$(cat "$VAR/spec/$d/prefix")")"
-    done
+        printf '        %s: %s,\n' "$(star_str "$dn")" "$(star_str "$(rd "$VAR/spec/$d/prefix")")"
+    done < "$SPEC/deps.all"
     printf '    },\n'
     printf '}\n'
 }
@@ -193,9 +315,9 @@ do_patch() {
 }
 
 # protocol_env -- a plan sees the environment star/PROTOCOL.md defines, and
-# nothing of shpack's own (ROOT, STORE, SHPACK_*, ...: a Makefile reads its
-# environment): everything else is un-exported, kept as a shell variable for
-# the builder's helpers. Another host (Spack's adapter) builds the same one.
+# nothing of its host's or the builder's own (SHPACK_*, DISTFILES, ...: a
+# Makefile reads its environment): everything else is un-exported, kept as a
+# shell variable for the builder's helpers.
 protocol_env() {
     local line name val
     export -p > "$VAR/exports.$$"
@@ -217,26 +339,8 @@ protocol_env() {
     rm -f "$VAR/exports.$$"
 }
 
-# write_metadata -- the end of every install, built or registered. Metadata
-# as Spack keeps it, in .spack/: the recipe directory under
-# repos/<namespace>/packages/ (bootstrap, shpack/repo.yaml's) and shpack's own
-# hash input (a build's plan and log are copied in before this). Then modes:
-# they are part of what an install produces, so fix them rather than inherit
-# the umask and whatever the tarballs carried (the mescc-tools cp makes 0600
-# files): directories 755, files 644, or 755 if executable at all (Spack's
-# default install permissions too). .spack/spec.json last: it marks the
-# prefix installed, for shpack and Spack alike.
-write_metadata() {
-    mkdir -p "$PREFIX/.spack/repos/bootstrap/packages"
-    rm -rf "$PREFIX/.spack/repos/bootstrap/packages/$name"
-    cp -R "$REPO/$name" "$PREFIX/.spack/repos/bootstrap/packages/$name"
-    cp "$SPEC/manifest" "$PREFIX/.spack/shpack-manifest"
-    chmod -R u=rwX,go=rX "$PREFIX"
-    cp "$SPEC/spack-spec.json" "$PREFIX/.spack/spec.json"
-}
-
 do_finalize() {
-    # The plan (the build log is copied in by dag.mk, as spack-build-out.txt).
+    # The plan (the build log is the host's).
     mkdir -p "$PREFIX/.spack"
     cp "$SPEC/build.sh" "$PREFIX/.spack/shpack-build.sh"
     # Drop libtool .la archives (as Spack does): nothing in this store-prefix
@@ -244,41 +348,37 @@ do_finalize() {
     # orderings that differ across builds. A glob, not find -- shpack core has no
     # find; these always land directly in lib/ (and lib64/).
     rm -f "$PREFIX"/lib/*.la "$PREFIX"/lib64/*.la
-    write_metadata
+    normalize_modes
     cd /
     # SHPACK_KEEP_STAGE=1 keeps it, for comparing two builds of a package.
     [ -n "${SHPACK_KEEP_STAGE:-}" ] || rm -rf "$stage_dir"
 }
 
-# cmd_register_one -- a node the kaem phase installed (its recipe's
-# kaem-steps): the prefix is there, so it only gets its metadata, as a build's
-# finalize writes it.
-cmd_register_one() {
-    if [ $# -ne 1 ]; then die "usage: shpack register-one <id>"; fi
-    id=$1
-    SPEC=$VAR/spec/$id
-    [ "$(cat "$SPEC/kind")" = kaem ] || die "node '$id' is not the kaem phase's"
-    name=$(cat "$SPEC/name")
-    PREFIX=$(cat "$SPEC/prefix")
-    [ -d "$PREFIX" ] || die "$id: the kaem phase did not install $PREFIX"
-    write_metadata
-    echo "==> $id: registered $PREFIX"
+# normalize_modes -- modes are part of what an install produces, so fix them
+# rather than inherit the umask and whatever the tarballs carried (the
+# mescc-tools cp makes 0600 files): directories 755, files 644, or 755 if
+# executable at all (Spack's default install permissions too). The kaem
+# phase's prefixes get the same when they are registered.
+normalize_modes() {
+    chmod -R u=rwX,go=rX "$PREFIX"
 }
 
-cmd_build_one() {
-    if [ $# -ne 1 ]; then die "usage: shpack build-one <id>"; fi
+build_node() {
+    local d t depdir deptypes liblist p
     id=$1
     SPEC=$VAR/spec/$id
-    [ -f "$SPEC/kind" ] || die "unknown node '$id' (run shpack concretize)"
-    [ "$(cat "$SPEC/kind")" = built ] || die "node '$id' is not built by shpack (external or kaem)"
-    name=$(cat "$SPEC/name")
-    version=$(cat "$SPEC/version")
-    hash=$(cat "$SPEC/hash")
-    PREFIX=$(cat "$SPEC/prefix")
-    if [ -f "$PREFIX/.spack/spec.json" ]; then
-        echo "$id is already installed in $PREFIX"
-        return 0
-    fi
+    [ -f "$SPEC/kind" ] || die "unknown node '$id'"
+    [ "$(rd "$SPEC/kind")" = built ] || die "node '$id' is not built (external or kaem)"
+    name=$(rd "$SPEC/name")
+    version=$(rd "$SPEC/version")
+    PREFIX=$(rd "$SPEC/prefix")
+
+    # the direct deps then the closure: prefix_of's and ctx.deps' search order
+    while read -r d; do printf '%s\n' "$d"; done < "$SPEC/deps" > "$SPEC/deps.all"
+    while read -r d; do printf '%s\n' "$d"; done < "$SPEC/closure" >> "$SPEC/deps.all"
+
+    compose_env
+    export PATH
 
     package_dir=$REPO/$name
 
@@ -313,22 +413,21 @@ cmd_build_one() {
     # preserve the dag.mk jobserver flags already here.
     MAKEFLAGS="${MAKEFLAGS:-} SHELL=$sh"
     export PREFIX ARCH JOBS makejobs MAKEFLAGS SOURCE_DATE_EPOCH=0 \
-        HOME="$BUILD_HOME" SHELL sh PATH
+        HOME="$BUILD_HOME" TERM=dumb SHELL sh CONFIG_SHELL
 
     # Dirs the compiler-wrapper package injects as -I / -L / -Wl,-rpath, plus
     # PKG_CONFIG_PATH for configure. Direct link deps only: each shared lib
     # records its own DT_RUNPATH at build time, so transitive libs resolve
     # without the whole closure. Harmless for packages that don't use the
     # wrapper -- the SHPACK_* vars are read only by the wrapper shims.
-    local depdir deptypes liblist p
     SHPACK_INCLUDE_DIRS= SHPACK_LINK_DIRS= SHPACK_RPATH_DIRS=
-    PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-}
+    PKG_CONFIG_PATH=
     while read -r depdir deptypes; do
         case ,$deptypes, in
             *,link,*) ;;
             *) continue ;;
         esac
-        p=$(cat "$VAR/spec/$depdir/prefix")
+        p=$(rd "$VAR/spec/$depdir/prefix")
         [ -d "$p/include" ] && \
             SHPACK_INCLUDE_DIRS=${SHPACK_INCLUDE_DIRS:+$SHPACK_INCLUDE_DIRS:}$p/include
         for liblist in "$p/lib64" "$p/lib"; do
@@ -392,5 +491,5 @@ cmd_build_one() {
 
     echo "==> $id: finalize"
     do_finalize
-    echo "==> $id: installed in $PREFIX"
+    echo "==> $id: built in $PREFIX"
 }

@@ -26,6 +26,8 @@ export SHPACK_EXTERNALS="$TESTDIR/externals"
 # Unsandboxed, no shebang rewriting, and no two-stage make (t-install opts in):
 # etc/config yields to these empty-but-set values.
 export SANDBOX= PATCH_SHEBANGS= SHPACK_BOOTSTRAP_MAKE=
+# The builder from the tree (a real run takes the kaem phase's copy in the store).
+export SHPACK_BUILDER="$TESTROOT/bin/shpack-build"
 
 mkdir -p "$TESTDIR/store" "$TESTDIR/distfiles" "$SHPACK_REPO"
 : > "$SHPACK_EXTERNALS"

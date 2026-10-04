@@ -67,7 +67,8 @@ Environment contract (set in `start.kaem`, inherited by every `kaem.run`):
 
 `PATH` starts as the seed prefixes and grows one `${STORE}/<pkg>/bin` prepend
 per package, newest first -- the same composition rule shpack uses later; its
-final value is handed to shpack as `BASEPATH`.
+final value is handed to shpack as `BASEPATH`, and the builder composes the
+same base for every build from the kaem-phase nodes of its DAG.
 
 The `kaem.run` command sequences are dictated by what each package needs to
 compile under tcc/musl (object lists, `-D` macros, boot stages); the
