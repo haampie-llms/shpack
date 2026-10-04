@@ -48,6 +48,10 @@ unset IFS
 exec "$real" $inc $lnk $SHPACK_FILE_PREFIX_MAP "$@"
 """
 
+def setup_dependent_build_environment(ctx, env, dependent):
+    env.set("CC", ctx.prefix + "/bin/gcc")
+    env.set("CXX", ctx.prefix + "/bin/g++")
+
 def install(ctx):
     gcc = ctx.dep("gcc").prefix
     t = triple(ctx)

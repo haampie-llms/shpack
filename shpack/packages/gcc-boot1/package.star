@@ -26,14 +26,14 @@ depends_on("grep-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
 depends_on("gcc-boot0", type = "build")
-depends_on("musl@1.2.5")
+depends_on("musl@=1.2.5")
 depends_on("linux-headers")
 depends_on("binutils-boot0", type = ("build", "run"))
-depends_on("m4@1.4.7", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("m4@=1.4.7", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("gawk-boot", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("dash-boot", type = "build")
 
 # GCC 9.5's download_prerequisites set, in-tree as gmp/ mpfr/ mpc/ for
@@ -41,45 +41,39 @@ depends_on("dash-boot", type = "build")
 resource(
     url = "https://ftpmirror.gnu.org/gmp/gmp-6.1.0.tar.bz2",
     sha256 = "498449a994efeba527885c10405993427995d3f86b8768d8cdf8d9dd7c6b73e8",
+    placement = "gmp",
 )
 resource(
     url = "https://ftpmirror.gnu.org/mpfr/mpfr-3.1.4.tar.bz2",
     sha256 = "d3103a80cdad2407ed581f3618c4bed04e0c92d1cf771a65ead662cc397f7775",
+    placement = "mpfr",
 )
 resource(
     url = "https://ftpmirror.gnu.org/mpc/mpc-1.0.3.tar.gz",
     sha256 = "617decc6ea09889fb08ede330917a00b16809b8db88c29c31bfbb49cbf88ecc3",
+    placement = "mpc",
 )
 
 def edit(ctx):
-    # Relocate the flat-unpacked gmp/mpfr/mpc resources into the GCC tree for
-    # auto-detection. cwd is the gcc source dir (it sorts first).
-    actions = []
-    for p in ["gmp", "mpfr", "mpc"]:
-        actions += [
-            move(ctx.stage_dir + "/" + p + "-*/", "./" + p),
-            # The bundled config.sub/guess predate musl; overwrite with GCC's
-            # pair. mpc ships them read-only (555); cp -f unlinks and retries.
-            copy(["config.sub", "config.guess"], "./" + p + "/", force = True),
-        ]
-    return actions
+    # The resources' bundled config.sub/guess predate musl; overwrite with
+    # GCC's pair. mpc ships them read-only (555); cp -f unlinks and retries.
+    return [copy(["config.sub", "config.guess"], "./" + p + "/", force = True)
+            for p in ["gmp", "mpfr", "mpc"]]
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     flags = "-O2 %s %s" % (ctx.file_prefix_map, ctx.debug_prefix_map)
-    return [
-        # gmp's AC_PROG_LEX fatally runs flex if on PATH; flex is only used by
-        # gmp demos, so skip the probe.
-        setenv("ac_cv_prog_lex_root", "lex.yy"),
-        # In-tree mpfr.h (mpfr/src) must be found while GCC compiles, plus the
-        # kernel uapi. source_dir is the gcc source dir (before the out-of-tree cd).
-        setenv("C_INCLUDE_PATH", ctx.source_dir + "/mpfr/src:" +
-               ctx.dep("linux-headers").prefix + "/include"),
-        # -ffile-prefix-map for .c, but gcc 9.5's driver doesn't forward it to
-        # the assembler, so libgcc's .S stubs leak comp_dir -- add the older
-        # -fdebug-prefix-map, which it does forward. Env-passed.
-        setenv("CFLAGS_FOR_TARGET", flags),
-        setenv("CXXFLAGS_FOR_TARGET", flags),
-    ]
+    # gmp's AC_PROG_LEX fatally runs flex if on PATH; flex is only used by
+    # gmp demos, so skip the probe.
+    env.set("ac_cv_prog_lex_root", "lex.yy")
+    # In-tree mpfr.h (mpfr/src) must be found while GCC compiles, plus the
+    # kernel uapi. source_dir is the gcc source dir (before the out-of-tree cd).
+    env.set("C_INCLUDE_PATH", ctx.source_dir + "/mpfr/src:" +
+            ctx.dep("linux-headers").prefix + "/include")
+    # -ffile-prefix-map for .c, but gcc 9.5's driver doesn't forward it to
+    # the assembler, so libgcc's .S stubs leak comp_dir -- add the older
+    # -fdebug-prefix-map, which it does forward. Env-passed.
+    env.set("CFLAGS_FOR_TARGET", flags)
+    env.set("CXXFLAGS_FOR_TARGET", flags)
 
 # --prefix and --disable-dependency-tracking come from the autotools configure.
 def configure_args(ctx):
@@ -125,8 +119,7 @@ def configure_args(ctx):
         "--disable-libmudflap",
     ]
 
-def build_args(ctx):
-    return ["MAKEINFO=true"]
+build_targets = ["MAKEINFO=true"]
 
 def install(ctx):
     return [run("make", "install", "MAKEINFO=true")]

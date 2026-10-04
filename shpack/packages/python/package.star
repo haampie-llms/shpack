@@ -3,7 +3,7 @@
 """Python 3.8.20, built by the gcc-9.5 bridge against static musl -- glibc 2.43
 needs python3 (scripts/gen-as-const.py and friends)."""
 
-load("//build_systems/lib.star", "cpu", "replace_bin_sh", "triple")
+load("//build_systems/lib.star", "replace_bin_sh", "triple")
 
 homepage = "https://www.python.org/"
 license("Python-2.0")
@@ -20,9 +20,9 @@ build_system("generic")
 depends_on("gcc-boot1", type = "build")
 depends_on("binutils-boot0", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
@@ -35,17 +35,15 @@ def edit(ctx):
     # drives the compiler this way).
     return [replace_bin_sh(ctx, "Lib/subprocess.py")]
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     gcc = ctx.dep("gcc-boot1").prefix
-    return [
-        setenv("CC", gcc + "/bin/gcc"),
-        setenv("CXX", gcc + "/bin/g++"),
-        # PYTHONHASHSEED=0 pins marshal order of set/frozenset literals in .pyc.
-        setenv("PYTHONHASHSEED", "0"),
-        # Make setup.py take its cross_compiling branch, which skips /usr/include
-        # and /usr/local probing (those dirs don't exist in the chroot).
-        setenv("_PYTHON_HOST_PLATFORM", "linux-" + cpu(ctx)),
-    ]
+    env.set("CC", gcc + "/bin/gcc")
+    env.set("CXX", gcc + "/bin/g++")
+    # PYTHONHASHSEED=0 pins marshal order of set/frozenset literals in .pyc.
+    env.set("PYTHONHASHSEED", "0")
+    # Make setup.py take its cross_compiling branch, which skips /usr/include
+    # and /usr/local probing (those dirs don't exist in the chroot).
+    env.set("_PYTHON_HOST_PLATFORM", "linux-" + ctx.target)
 
 # Only the modules needed by glibc's build scripts (gen-as-const.py,
 # glibcextract.py): subprocess machinery plus locale for encoding detection.
@@ -96,11 +94,12 @@ def install(ctx):
         ),
         # Drop -E so the install's compileall honors PYTHONHASHSEED (env is already
         # clean under env -i); pins set/frozenset marshal order in the .pyc.
-        substitute("Makefile", "PYTHON_FOR_BUILD=./$(BUILDPYTHON) -E", "PYTHON_FOR_BUILD=./$(BUILDPYTHON)"),
+        filter_file("PYTHON_FOR_BUILD=./$(BUILDPYTHON) -E", "PYTHON_FOR_BUILD=./$(BUILDPYTHON)",
+                    "Makefile", string = True),
         run("make", ctx.makejobs),
         # Scrub build path before install so make install's compileall bakes the
         # scrubbed source into .pyc directly.
-        substitute("build/lib.*/_sysconfigdata_*.py", ctx.stage_dir, "/build"),
+        filter_file(ctx.stage_dir, "/build", "build/lib.*/_sysconfigdata_*.py", string = True),
         # No uname -> PLATDIR=plat-unknown, whose make rule runs regen (h2py's
         # /usr/include/netinet/in.h, absent here) and fails install. Pre-create the
         # dir so make skips regen; the modules it would generate are deprecated/unused.
@@ -108,6 +107,6 @@ def install(ctx):
         run("make", "install"),
         remove(lib + "/test", recursive = True),
         # config Makefile has no .pyc; scrub it after install.
-        substitute(lib + "/config-3.8*-linux-*/Makefile", ctx.stage_dir, "/build"),
+        filter_file(ctx.stage_dir, "/build", lib + "/config-3.8*-linux-*/Makefile", string = True),
         symlink("python3.8", ctx.prefix + "/bin/python3", if_missing = True),
     ]

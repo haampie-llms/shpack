@@ -30,13 +30,13 @@ depends_on("pcre2")
 depends_on("perl", type = ("build", "run"))
 depends_on("gmake", type = "build")
 depends_on("coreutils", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 def edit(ctx):
@@ -64,7 +64,7 @@ def configure_args(ctx):
 # NO_GETTEXT: built ~nls (no gettext in the store). NO_TCLTK: no gitk/git-gui.
 # SHELL_PATH bakes the store shell into git's generated scripts and into git's
 # compiled-in default shell (the sandbox has no host /bin/sh).
-def build_args(ctx):
+def build_targets(ctx):
     return [
         "NO_GETTEXT=1",
         "NO_TCLTK=1",

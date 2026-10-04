@@ -40,7 +40,7 @@ version(
 )
 build_system("generic")
 depends_on("liba")
-depends_on("gmake@4.4.1")
+depends_on("gmake@=4.4.1")
 depends_on("dash")
 def install(ctx):
     return [

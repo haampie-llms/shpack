@@ -3,8 +3,9 @@
 # autotools -- packages with a pregenerated ./configure (there is no autoconf
 # in the bootstrap; tarballs must ship configure).
 #
-# Hooks: configure_args, build_args, install_targets -- lists of arguments,
-# which may contain spaces ("AR=tcc -ar"); configure also takes VAR=value.
+# Hooks, as in Spack: configure_args (a function), build_targets and
+# install_targets (lists, or functions of ctx) -- arguments, which may contain
+# spaces ("AR=tcc -ar"); configure also takes VAR=value.
 
 load("//build_systems/lib.star", "hook")
 
@@ -42,7 +43,7 @@ def configure(ctx):
     )]
 
 def build(ctx):
-    return [run("make", "SHELL=" + ctx.sh, ctx.makejobs, hook(ctx, "build_args", []))]
+    return [run("make", "SHELL=" + ctx.sh, ctx.makejobs, hook(ctx, "build_targets", []))]
 
 def install(ctx):
     targets = hook(ctx, "install_targets", []) or ["install"]

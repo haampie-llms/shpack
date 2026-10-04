@@ -41,7 +41,7 @@ mkstar tool <<'EOF2'
 """toy root"""
 version("0.5")
 build_system("generic")
-depends_on("libb@2.1")
+depends_on("libb@=2.1")
 depends_on("liba")
 depends_on("ext")
 depends_on("dash")
@@ -111,6 +111,16 @@ if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
     fail "a version-range when= must be rejected"
 fi
 assert_contains "$TESTDIR/bad.log" "use @=VERSION"
+
+# A dependency pins an exact version as name@=VERSION, as in Spack.
+mkstar bad <<'EOF2'
+version("1.0")
+depends_on("liba@1.0")
+EOF2
+if shpack concretize bad > "$TESTDIR/bad.log" 2>&1; then
+    fail "name@VERSION in depends_on must be rejected"
+fi
+assert_contains "$TESTDIR/bad.log" "use name@=VERSION"
 
 # One spec per depends_on, and only Spack's dependency types.
 mkstar bad <<'EOF2'

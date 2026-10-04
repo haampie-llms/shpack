@@ -4,7 +4,7 @@
 generators are Perl). Core interpreter only; the optional DB/gdbm extensions
 Spack's perl pulls in aren't needed here."""
 
-load("//build_systems/lib.star", "cpu", "uname_shim")
+load("//build_systems/lib.star", "uname_shim", "uname_shim_dir")
 
 homepage = "https://www.perl.org/"
 license("Artistic-1.0-Perl OR GPL-1.0-or-later")
@@ -24,11 +24,11 @@ depends_on("coreutils", type = "build")
 depends_on("gawk", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 def edit(ctx):
@@ -44,7 +44,7 @@ def edit(ctx):
         "installusrbinperl='undef'",
         "pager='%s'" % storecat,
         "sysman=''",
-        "myarchname='%s-linux'" % cpu(ctx),
+        "myarchname='%s-linux'" % ctx.target,
         "glibpth='%s/lib'" % glibc,
         "plibpth=''",
         "libpth='%s/lib'" % glibc,
@@ -60,24 +60,28 @@ def edit(ctx):
         # present, which the sandbox denies executing. Point it at the store shell;
         # the $startsh it derives then flows into every helper script it generates
         # (patch-shebangs, acting only on existing #! lines, can't reach those).
-        substitute("Configure", "xxx='/bin/sh'", "xxx='%s'" % ctx.sh),
+        filter_file("xxx='/bin/sh'", "xxx='%s'" % ctx.sh, "Configure", string = True),
         # Configure's shebang test runs "#!$xcat", but xcat defaults to the host
         # /bin/cat, which the sandbox denies; the test then silently fails and
         # Configure falls back to unexecutable ': use' scripts. Point xcat at store cat.
-        substitute("Configure", "xcat=/bin/cat", "xcat=" + storecat),
-        substitute("Configure", "xcat=/usr/bin/cat", "xcat=" + storecat),
+        filter_file("xcat=/bin/cat", "xcat=" + storecat, "Configure", string = True),
+        filter_file("xcat=/usr/bin/cat", "xcat=" + storecat, "Configure", string = True),
         # The Errno extension scans <errno.h>, hardcoding "$sysroot/usr/include"
         # first; it finds the host errno.h (unreadable in the sandbox) and dies.
         # Point it at the store glibc headers.
-        substitute("ext/Errno/Errno_pm.PL", '"$sysroot/usr/include"', '"%s/include"' % glibc),
+        filter_file('"$sysroot/usr/include"', '"%s/include"' % glibc, "ext/Errno/Errno_pm.PL",
+                    string = True),
         # Cwd.pm shells out to a hardcoded /bin/pwd (denied), so cwd() comes back
         # empty and MakeMaker dies. Repoint the first candidate at the store pwd.
-        substitute("dist/PathTools/Cwd.pm", "'/bin/pwd'", "'%s'" % storepwd),
+        filter_file("'/bin/pwd'", "'%s'" % storepwd, "dist/PathTools/Cwd.pm", string = True),
         # config.over wins over probing (sourced last): pin the wall-clock stamp and
         # the host-FS probes that diverge between host and hermetic chroot. Lib paths
         # -> store glibc; pager -> in-closure cat (no pager packaged; never invoked).
         write_file("config.over", config_over),
     ]
+
+def setup_build_environment(ctx, env):
+    env.prepend_path("PATH", uname_shim_dir(ctx))
 
 def install(ctx):
     gcc = ctx.dep("compiler-wrapper").prefix
@@ -94,7 +98,7 @@ def install(ctx):
             "-Dcc=" + gcc + "/bin/gcc",
             "-Dld=" + gcc + "/bin/gcc",
             "-Dosname=linux",
-            "-Darchname=%s-linux" % cpu(ctx),
+            "-Darchname=%s-linux" % ctx.target,
             "-Dusrinc=" + glibc + "/include",
             "-Dlibpth=" + glibc + "/lib",
             "-Dlocincpth= ",

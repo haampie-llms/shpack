@@ -42,8 +42,8 @@ parallel = False
 | directive | meaning |
 |---|---|
 | `version(ver, sha256=, url=, fname=)` | a buildable version and its source. The first declared version is the default for a bare name. `fname` defaults to the URL's basename. A version without `sha256` has no source. |
-| `resource(url=, sha256=, fname=, when=)` | an extra distfile, unpacked into the stage beside the main source |
-| `depends_on(spec, when=, type=)` | one dependency, `name` or `name@version` (exact). `type` is Spack's: `"build"`, `"link"`, `"run"`, `"test"` or a tuple of them; the default is `("build", "link")`. |
+| `resource(url=, sha256=, fname=, destination=, placement=, when=)` | an extra distfile, unpacked into the source directory as Spack places it: its top directory (or all of it, if it has several entries) goes to `<source>/<destination>/<placement>`. `destination` defaults to the source directory itself, `placement` to the name of that top directory. |
+| `depends_on(spec, when=, type=)` | one dependency, `name` or `name@=version` (exactly that version; `name@version`, a range in Spack, is an error). `type` is Spack's: `"build"`, `"link"`, `"run"`, `"test"` or a tuple of them; the default is `("build", "link")`. |
 | `patch(file, level=1, when=)` | apply `patches/<file>` with `-p<level>` |
 | `license(id, checked_by=, when=)` | an SPDX license identifier (`checked_by` is not kept) |
 | `when(cond, [...])` | Spack's `with when(cond):`. The list holds what `depends_on`, `patch`, `resource` and `license` return (or nested `when` calls); each of those directives' conditions becomes its own AND `cond`. Version lists intersect, and an empty intersection is an error. The result is written back as `@=V1,=V2 target=FAMILY:`. Returns the directives, so `when` nests. |
@@ -55,7 +55,7 @@ its list run first, as arguments do, and `when` then narrows them:
 ```python
 when("@=4.9-musl", [
     depends_on("gcc-boot0", type = "build"),
-    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("xz@=5.2.5-musl", type = "build"),
     when("target=aarch64:", [patch("arm64.patch")]),
 ])
 when("@=4.9", [depends_on(t, type = "build") for t in ["gmake", "xz"]])
@@ -73,6 +73,7 @@ Anything else is an error.
 | docstring | the description: the module's first statement, if it is a string; whitespace runs become single spaces |
 | `homepage` | a string |
 | `parallel` | `False`: build with `-j1` |
+| `build_targets`, `install_targets` | extra `make` arguments of the build and install steps, as in Spack: a list of strings, or a function of `ctx` returning one |
 | `build_directory` | configure/build out of tree, in this relative subdirectory of the source |
 
 ### Phases
@@ -80,17 +81,28 @@ Anything else is an error.
 The build system (a module `//build_systems/<name>.star`) exports `phases`, a
 list of phase names, and a default function for each. A recipe overrides a
 phase by defining a function with the same name. Each phase is a function
-`f(ctx)` returning a list of actions. The host evaluates them in order:
+`f(ctx)` returning a list of actions. Phases do not change the environment;
+that is the job of two hooks with Spack's signatures, which record changes on
+`env` (Spack's `EnvironmentModifications`: `env.set(name, value)`,
+`env.unset(name)`, `env.prepend_path(name, path)`,
+`env.append_path(name, path)`) and return `None`. The host evaluates, in
+order:
 
-- `setup_build_environment(ctx)` first, if defined. It may return only
-  `setenv`, `prepend_path` and `unsetenv`.
+- `setup_dependent_build_environment(ctx, env, dependent)` of each
+  dependency that Spack sets up a build for (`effective_deptypes`): the direct
+  `build` (or `test`) dependencies, and the `link` dependencies, through
+  `link` edges. Dependencies come before their dependents, in the order the
+  host gives them (`env_deps`), so a dependent overrides. `ctx` is the
+  dependency's (its `name`, `version`, `id`, `target`, `prefix`, `dep()`,
+  `satisfies()`), `dependent` the build's.
+- `setup_build_environment(ctx, env)` of the recipe, if defined.
 - then every phase in `phases`.
 
 A recipe calls a default explicitly, e.g.
 `load("//build_systems/autotools.star", autotools_install = "install")` and
 `return autotools_install(ctx) + [...]`. Build systems reach the recipe's
-argument hooks (`configure_args(ctx)`, `build_args`, `build_targets`,
-`install_targets`, all returning lists of strings) through `ctx.pkg`.
+argument hooks (`configure_args(ctx)`, `build_targets`, `install_targets`,
+all lists of strings) through `ctx.pkg`.
 
 ### The build context
 
@@ -99,7 +111,7 @@ argument hooks (`configure_args(ctx)`, `build_args`, `build_targets`,
 | field | |
 |---|---|
 | `name`, `version`, `id` | the node; `id` is `name-version` |
-| `arch` | `amd64` or `aarch64` |
+| `target` | the target family, as Spack names it: `x86_64` or `aarch64` |
 | `prefix` | the install prefix |
 | `sh` | the build shell (the recipe's `dash` dependency) |
 | `stage_dir`, `source_dir` | where sources are unpacked; the first directory there |
@@ -112,8 +124,12 @@ argument hooks (`configure_args(ctx)`, `build_args`, `build_targets`,
 | `satisfies(when)` | the `when=` grammar, against this node |
 
 The shpack builder writes it as a Starlark file, `ctx = {...}`, with the
-fields above minus the computed ones (`build_directory`, `pkg`, `dep`,
-`satisfies`), plus `deps`, a dict from dependency name to prefix.
+fields above minus the computed ones (`target`, `build_directory`, `pkg`,
+`dep`, `satisfies`), plus `arch` (`amd64` or `aarch64`), `deps`, a dict from
+dependency name to prefix, and `env_deps`: for each dependency whose
+`setup_dependent_build_environment` applies, in order, a dict of its `name`,
+`version`, `id`, `prefix` and `deps` (its direct dependencies, then the rest
+of its closure).
 
 ## Actions
 
@@ -126,7 +142,6 @@ match something.
 |---|---|
 | `run(*argv, cwd=, env=, stdout=)` | run a program; list arguments are flattened one level |
 | `sh(script, cwd=)` | escape hatch: a POSIX sh script under the build shell with `-e`. For build steps that must inspect build output. |
-| `setenv(name, value)`, `prepend_path(name, value)`, `unsetenv(name)` | environment for the rest of the build |
 | `chdir(path)` | current directory for the rest of the build (glob allowed, matching one) |
 | `mkdir(path, ...)` | with parents |
 | `copy(src, dst, recursive=, preserve=, force=)` | `src` may be several paths or globs; `preserve` keeps modes, times and links |
@@ -136,8 +151,11 @@ match something.
 | `symlink_each(targets, dir, prefix=, relative=, if_missing=, exclude=)` | a link `dir/<prefix><basename>` for each existing target (paths or globs, expanded once); `relative` links to the base name; `exclude` is a base-name glob |
 | `chmod(mode, paths)` | mode as octal digits, e.g. `"755"` |
 | `write_file(path, content, mode=)`, `append_file(path, content)` | exact bytes |
-| `substitute(files, old, new)` | replace every occurrence of the literal `old`, line by line |
-| `filter_file(files, regex, repl)` | replace every match of `regex` (the portable subset: literals, `.`, `*` after an atom, `^` first, `$` last, `[...]`, backslash-escaped metacharacters; `+ ? ( ) { } \|` must be escaped) with the literal `repl`, line by line |
+| `filter_file(regex, repl, *files, string=)` | Spack's: replace every match of `regex`, line by line, with `repl`. `regex` is the portable subset (literals, `.`, `*` after an atom, `^` first, `$` last, `[...]`, backslash-escaped metacharacters; `+ ? ( ) { } \|` must be escaped), or with `string = True` a literal. In `repl`, `\\` is one backslash and groups (`\1`) are not supported; the rest is literal. |
+
+`env.set(...)` and friends record the actions `setenv`, `unsetenv`,
+`prepend_path` and `append_path` (fields `name`, `value`): environment for
+the rest of the build.
 
 ## Hosts
 
@@ -152,14 +170,16 @@ recipe's types, a kaem node's `step`; for the node, `version`, `deps`,
 `closure`, `sources`, `patches`, `parallel`), and the builder derives the
 rest:
 
-- **Resolution.** `name@version` pins that exact version. A bare name means
+- **Resolution.** `name@=version` pins that exact version. A bare name means
   the first version its recipe declares; a recipe always beats an external of
   the same name. A package never depends on another version of itself, so
   bootstrap stages get names of their own (`gcc-boot0`, `gcc-boot1`, ...).
-- **Staging.** The main archive, then the resources in declaration order,
-  are unpacked side by side into the stage directory with the compressor and
-  `tar` on the build PATH. `source_dir` is the first directory in the stage,
-  in sorted order. The recipe's patches are then applied in order with
+- **Staging.** The main archive is unpacked into the stage directory with
+  the compressor and `tar` on the build PATH; `source_dir` is the first
+  directory there, in sorted order. The resources follow in declaration
+  order, each moved to its place under `source_dir` (an empty directory
+  there, as a git archive leaves for a submodule, is replaced; anything else
+  is an error). The recipe's patches are then applied in order with
   `patch -p<level>` from the build PATH, and `#!` interpreters in the whole
   stage are rewritten to `ctx.sh`.
 - **Environment.** Nothing is inherited from the invoking process:
@@ -179,6 +199,10 @@ rest:
   - Also set: `PREFIX`, `ARCH`, `JOBS`, `makejobs`, and, from the direct
     `link` dependencies, the compiler-wrapper variables and
     `PKG_CONFIG_PATH`.
+  - `env_deps`, the dependencies whose `setup_dependent_build_environment`
+    applies, are the direct `build`, `test` and `link` dependencies and their
+    `link` dependencies, transitively, in the DFS post-order above
+    (dependencies before dependents).
 - **Finalization.** `lib/*.la` and `lib64/*.la` are removed. Modes are
   normalized: directories 755, files 644, or 755 if any execute bit is set.
 - **Order.** `ctx.deps` is the direct dependencies, then the closure sorted
@@ -199,7 +223,7 @@ The shpack host consumes other renderings of the same records.
 | file | lines |
 |---|---|
 | `versions` | `VER SHA FNAME URL` (first declared = default) |
-| `resources` | `WHEN SHA FNAME URL` |
+| `resources` | `WHEN SHA FNAME URL DESTINATION PLACEMENT` |
 | `deps` | `WHEN TYPES SPEC` (`TYPES`: a comma-separated subset of build,link,run,test) |
 | `patches` | `FILE level=N [when=VERS] [arch=ARCH]` |
 | `license` | `WHEN ID` |

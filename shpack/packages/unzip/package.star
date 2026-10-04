@@ -20,13 +20,13 @@ build_system("generic")
 # `generic` target, which runs Info-ZIP's unix/configure feature probe first.
 depends_on("compiler-wrapper", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 # Upstream/distros carry many CVE/hardening patches for unzip 6.0; not

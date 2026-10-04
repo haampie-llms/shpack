@@ -32,10 +32,10 @@ when("@=4.9", [
     depends_on("gmake", type = "build"),
     depends_on("xz", type = "build"),
     depends_on("grep-boot", type = "build"),
-    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("gawk@=5.3.1", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("tar@1.35-musl", type = "build"),
+    depends_on("tar@=1.35-musl", type = "build"),
     depends_on("dash", type = "build"),
 ])
 
@@ -44,7 +44,7 @@ when("@=4.9-musl", [
     depends_on("gcc-boot0", type = "build"),
     depends_on("binutils-boot0", type = "build"),
     depends_on("gmake", type = "build"),
-    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("xz@=5.2.5-musl", type = "build"),
     depends_on("grep-boot", type = "build"),
     depends_on("gawk-boot", type = "build"),
     depends_on("diffutils", type = "build"),

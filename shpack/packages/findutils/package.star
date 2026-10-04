@@ -40,17 +40,15 @@ def configure_args(ctx):
     ]
 
 # tcc's built-in archiver lacks the `u` mode automake's default ARFLAGS=cru asks for.
-def build_args(ctx):
-    return [
-        "MAKEINFO=true",
-        "AR=tcc -ar",
-        "ARFLAGS=rc",
-    ]
+build_targets = [
+    "MAKEINFO=true",
+    "AR=tcc -ar",
+    "ARFLAGS=rc",
+]
 
-def install_targets(ctx):
-    return [
-        "install",
-        "MAKEINFO=true",
-        "AR=tcc -ar",
-        "ARFLAGS=rc",
-    ]
+install_targets = [
+    "install",
+    "MAKEINFO=true",
+    "AR=tcc -ar",
+    "ARFLAGS=rc",
+]

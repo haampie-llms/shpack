@@ -11,7 +11,7 @@ license("MIT")
 
 # The @spack git commit, which builds pyclingo without cffi. GitHub archives omit
 # submodule contents, so clasp and its nested libpotassco come as resources,
-# relocated in edit().
+# placed where the submodules go.
 version(
     "5.5.0-spack",
     sha256 = "7818eef2296c17ad38a57a77f7925c8df41744c4e736ab81042df95c1330f43b",
@@ -22,11 +22,14 @@ resource(
     url = "https://github.com/potassco/clasp/archive/b089aa1509511ab403c0b9abd0d13eb9e873af44.tar.gz",
     sha256 = "ab2ac6601292619f94831065ee5c009f3168e14be52a65df7b9abdc20a1fc33f",
     fname = "clasp-b089aa15.tar.gz",
+    placement = "clasp",
 )
 resource(
     url = "https://github.com/potassco/libpotassco/archive/2f9fb7ca2c202f1b47643aa414054f2f4f9c1821.tar.gz",
     sha256 = "41eb8b7d87ecea48392de4ada455cda179cbd62fd63496355dea87e1e44b599f",
     fname = "libpotassco-2f9fb7ca.tar.gz",
+    destination = "clasp",
+    placement = "libpotassco",
 )
 
 build_system("generic")
@@ -39,35 +42,27 @@ depends_on("re2c", type = "build")
 depends_on("cmake", type = "build")
 depends_on("bison", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 def edit(ctx):
-    # do_stage cd'd into whichever flat dir sorted first; work from clingo's.
     return [
-        chdir(ctx.stage_dir + "/clingo-*"),
-        # Reconstruct the submodule tree the @spack commit pins.
-        remove("clasp", recursive = True),
-        move("../clasp-*/", "clasp"),
-        remove("clasp/libpotassco", recursive = True),
-        move("../libpotassco-*/", "clasp/libpotassco"),
         # Drop PyEval_ThreadsInitialized/PyEval_InitThreads (removed in Python 3.9).
-        substitute("libpyclingo/pyclingo.cc",
-                   "if (!PyEval_ThreadsInitialized()) { PyEval_InitThreads(); }", ""),
+        filter_file("if (!PyEval_ThreadsInitialized()) { PyEval_InitThreads(); }", "",
+                    "libpyclingo/pyclingo.cc", string = True),
         # Doxygen can't be disabled via a -D; neutralize the lookup (as Spack does).
-        substitute(["clasp/CMakeLists.txt", "clasp/libpotassco/CMakeLists.txt"],
-                   "find_package(Doxygen)", 'message("Doxygen disabled")'),
+        filter_file("find_package(Doxygen)", 'message("Doxygen disabled")',
+                    ["clasp/CMakeLists.txt", "clasp/libpotassco/CMakeLists.txt"], string = True),
     ]
 
 def install(ctx):
     py = ctx.dep("cpython").prefix
-    wrapper = ctx.dep("compiler-wrapper").prefix
 
     # Pass PYCLINGO_INSTALL_DIR + PYCLINGO_SUFFIX (EXT_SUFFIX) so cmake never falls
     # back to cmake/python-site.py, which imports distutils (gone in Python 3.12+).
@@ -75,11 +70,6 @@ def install(ctx):
     suffix = ".cpython-314-" + triple(ctx) + ".so"
 
     return [
-        setenv("CC", wrapper + "/bin/cc"),
-        setenv("CXX", wrapper + "/bin/c++"),
-        prepend_path("PATH", ctx.dep("bison").prefix + "/bin"),
-        prepend_path("PATH", ctx.dep("re2c").prefix + "/bin"),
-        prepend_path("PATH", ctx.dep("cmake").prefix + "/bin"),
         mkdir("build"),
         chdir("build"),
         # PY_SHARED=OFF: a self-contained _clingo*.so in clingo's own site-packages.

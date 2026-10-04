@@ -52,16 +52,14 @@ def edit(ctx):
     # Blank libgcc's hardcoded -g: 4.7's -fdebug-prefix-map misses the
     # include-fixed path it leaks into .debug_*, and a make-var override
     # can't reach the libgcc sub-make (gcc forwards only FLAGS_TO_PASS).
-    return [filter_file("libgcc/Makefile.in", "^LIBGCC2_DEBUG_CFLAGS = -g$",
-                        "LIBGCC2_DEBUG_CFLAGS =")]
+    return [filter_file("^LIBGCC2_DEBUG_CFLAGS = -g$", "LIBGCC2_DEBUG_CFLAGS =",
+                        "libgcc/Makefile.in")]
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     # edit() drops libgcc's -g; debug_prefix_map still covers any other
     # target debug. Env-passed to keep $stage_dir out of gcc 4.7's configargs.
-    return [
-        setenv("CFLAGS_FOR_TARGET", "-O2 " + ctx.debug_prefix_map),
-        setenv("CXXFLAGS_FOR_TARGET", "-O2 " + ctx.debug_prefix_map),
-    ]
+    env.set("CFLAGS_FOR_TARGET", "-O2 " + ctx.debug_prefix_map)
+    env.set("CXXFLAGS_FOR_TARGET", "-O2 " + ctx.debug_prefix_map)
 
 # --prefix and --disable-dependency-tracking come from the autotools configure.
 def configure_args(ctx):
@@ -112,8 +110,7 @@ def configure_args(ctx):
         "--disable-libmudflap",
     ]
 
-def build_args(ctx):
-    return ["MAKEINFO=true"]
+build_targets = ["MAKEINFO=true"]
 
 def install(ctx):
     return [run("make", "install", "MAKEINFO=true")]

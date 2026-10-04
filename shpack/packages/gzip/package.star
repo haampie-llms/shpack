@@ -21,13 +21,13 @@ build_system("autotools")
 # its closure (configure needs it).
 depends_on("compiler-wrapper", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 # gzip makes a recursive symlink if built in-source, so configure out-of-tree.

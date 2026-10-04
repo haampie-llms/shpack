@@ -3,7 +3,7 @@
 """Zstandard 1.5.7 -- a fast lossless compressor: the zstd CLI plus libzstd.
 Built at the gcc-16 layer via the upstream Makefile."""
 
-load("//build_systems/lib.star", "uname_shim")
+load("//build_systems/lib.star", "uname_shim", "uname_shim_dir")
 
 homepage = "https://facebook.github.io/zstd/"
 license("BSD-3-Clause OR GPL-2.0-or-later")
@@ -34,13 +34,13 @@ depends_on("dash", type = "build")
 when("@=1.5.7", [
     depends_on("compiler-wrapper", type = "build"),
     depends_on("gmake", type = "build"),
-    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("sed@=4.9-musl", type = "build"),
     depends_on("grep-boot", type = "build"),
-    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("gawk@=5.3.1", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("tar@1.35-musl", type = "build"),
-    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("tar@=1.35-musl", type = "build"),
+    depends_on("xz@=5.2.5-musl", type = "build"),
 ])
 
 # 1.5.7-boot: toolchain-layer static build by gcc-boot-wrapper.
@@ -48,13 +48,13 @@ when("@=1.5.7-boot", [
     depends_on("gcc-boot-wrapper", type = "build"),
     depends_on("glibc"),
     depends_on("gmake", type = "build"),
-    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("sed@=4.9-musl", type = "build"),
     depends_on("grep-boot", type = "build"),
-    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("gawk@=5.3.1", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("tar@1.35-musl", type = "build"),
-    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("tar@=1.35-musl", type = "build"),
+    depends_on("xz@=5.2.5-musl", type = "build"),
 ])
 
 def edit(ctx):
@@ -63,16 +63,15 @@ def edit(ctx):
     # libzstd.so's Linux soname.
     return uname_shim(ctx)
 
+def setup_build_environment(ctx, env):
+    env.prepend_path("PATH", uname_shim_dir(ctx))
+
 def install(ctx):
     if ctx.satisfies("@=1.5.7-boot"):
         # Library only, static only: no install-shared (no .so forces
-        # static linking) and no CLI. Wrapper supplies glibc loader/libs
-        # but not headers; add them.
-        glibc = ctx.dep("glibc").prefix
+        # static linking) and no CLI.
         cc = ctx.dep("gcc-boot-wrapper").prefix + "/bin/gcc"
         return [
-            setenv("C_INCLUDE_PATH", glibc + "/include"),
-            setenv("LIBRARY_PATH", glibc + "/lib"),
             run("make", "-C", "lib", "SHELL=" + ctx.sh, "CC=" + cc, ctx.makejobs,
                 "PREFIX=" + ctx.prefix, "install-pc", "install-includes", "install-static"),
         ]

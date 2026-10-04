@@ -30,16 +30,14 @@ depends_on("dash-boot", type = "build")
 # which tcc 0.9.26's preprocessor lineage cannot handle.
 patch("arm64-elfnn-howto.patch", when = "target=aarch64:")
 
-def setup_build_environment(ctx):
-    return [
-        # Generated parsers ship and no flex exists; preseed to short-circuit
-        # AC_PROG_LEX, which would otherwise fatally run $LEX.
-        setenv("ac_cv_prog_lex_root", "lex.yy"),
-        # Cap libtool's command length so it never falls back to piecewise
-        # archive linking (tcc -ar recreates the archive on each call, so
-        # only the last batch would survive).
-        setenv("lt_cv_sys_max_cmd_len", "131072"),
-    ]
+def setup_build_environment(ctx, env):
+    # Generated parsers ship and no flex exists; preseed to short-circuit
+    # AC_PROG_LEX, which would otherwise fatally run $LEX.
+    env.set("ac_cv_prog_lex_root", "lex.yy")
+    # Cap libtool's command length so it never falls back to piecewise
+    # archive linking (tcc -ar recreates the archive on each call, so
+    # only the last batch would survive).
+    env.set("lt_cv_sys_max_cmd_len", "131072")
 
 def configure_args(ctx):
     t = triple(ctx, "musl", vendor = "unknown")
@@ -66,7 +64,7 @@ def configure_args(ctx):
         "--disable-shared",
     ]
 
-def build_args(ctx):
+def build_targets(ctx):
     return ["MAKEINFO=true", "M4=" + ctx.dep("m4").prefix + "/bin/m4"]
 
 def install(ctx):

@@ -69,6 +69,8 @@ static V record_value(void)
             k[m] = "sha256"; v[m++] = opt_value(d->sha256);
             k[m] = "url"; v[m++] = opt_value(d->url);
             k[m] = "fname"; v[m++] = mk_cstr(default_fname(d));
+            k[m] = "destination"; v[m++] = opt_value(d->destination);
+            k[m] = "placement"; v[m++] = opt_value(d->placement);
         } else if (strcmp(d->kind, "depends_on") == 0) {
             V t = mk_list(4);
             for (j = 0; dt_names[j]; j++)
