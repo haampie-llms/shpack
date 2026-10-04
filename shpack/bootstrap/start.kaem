@@ -188,9 +188,10 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 # nothing with what follows but PATH and LIBC_PREFIX. COMMAND=seed stops here
 # (the unit a package manager installs as one package, e.g. Spack); otherwise
 # base.kaem builds the rest of the base and hands over to shpack.
-# What the seed puts on the PATH of the steps after it, newest first (Spack's
-# adapter reads the same file to build them).
+# What the seed puts on the PATH of the steps after it, newest first (step.kaem
+# and the builder read the same file).
 include ${BOOT}/seed.path
+PATH=${SEEDPATH}
 
 if match ${COMMAND} seed; then
     # done

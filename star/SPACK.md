@@ -4,11 +4,13 @@
 and Python, so it can be evaluated by two interpreters:
 - shpack evaluates it with `star`.
 - Spack executes it as Python (`spack.starlark_eval`), in a namespace that
-  holds only the protocol's directives and actions.
+  holds only the protocol's directives, for the directive record it
+  concretizes with. It never runs a phase: it installs by running shpack's
+  builder, which plans with `star` from the DAG.
 
-Over every recipe, version and arch here, both give the same records;
-`tests/corpus.sh` produces the ones to compare. `star` is also the dialect
-checker, so a recipe that only Python accepts never gets in.
+Over every recipe here, both give the same records; `tests/corpus.sh`
+produces the ones to compare. `star` is also the dialect checker, so a recipe
+that only Python accepts never gets in.
 
 The Spack side is a prototype on the `star-recipes` branch of Spack. It loads
 this tree as a Package API v1 repository (`shpack/repo.yaml`).
@@ -16,14 +18,15 @@ this tree as a Package API v1 repository (`shpack/repo.yaml`).
 ## Dependency types
 
 The recipes declare Spack's types (`type=`, `("build", "link")` by default),
-and both hosts derive a build's environment from them by Spack's rule
+and the builder derives a build's environment from them by Spack's rule
 (PROTOCOL.md, "Hosts"). The concretizer, though, is told that every edge is
 `build`. The bootstrap links two musls, glibc-boot and glibc, and two dashes
 into what Spack would make a single unification set, and duplicates of link
 dependencies are beyond it, under `duplicates: minimal` and `full` alike.
 Declared as build edges, shpack's DAG concretizes (the packages are tagged
-`build-tools`). The adapter keeps the recipe's types (`StarPackage.declared_edges`) for PATH,
-the compiler wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
+`build-tools`). The adapter hands the builder the recipe's types
+(`StarPackage.declared_edges`, in each node's `edges`), for PATH, the compiler
+wrapper's `-I`/`-L`/rpath and `PKG_CONFIG_PATH`.
 
 ## Reuse
 
@@ -56,11 +59,12 @@ and Spack installs where shpack does.
 A version listed in its recipe's `kaem-steps` is built by the adapter the way
 shpack's kaem phase builds it (`_kaem_install`): the seed, `tcc@0.9.27`, by the
 stage0 seed itself on a copy of the tree (`COMMAND=seed`), any other step by
-its `kaem.run` under the kaem phase's environment contract, with the step's
-archives unexpanded in a DISTFILES directory and PATH composed as start.kaem
-composes it (the step, the steps before it newest first, `seed.path`). They
-install unhashed, by the `{name}-{version}` projections of the tree's
-`spack.yaml`.
+`shpack/bootstrap/step.kaem`, as base.kaem runs it: the adapter gives it the
+tree, the store, a DISTFILES directory with the step's archives unexpanded,
+the seed's prefix, the step and its prefix, and `STEPS`, the bins of the steps
+it depends on, newest first; step.kaem sets the rest of the kaem phase's
+environment contract. They install unhashed, by the `{name}-{version}`
+projections of the tree's `spack.yaml`.
 
 ## Shell-phase builds
 

@@ -2,6 +2,6 @@
 #
 # The seed's contribution to the PATH of every kaem step after it: tcc 0.9.27
 # and musl (${SEED}/bin), then the tools the seed was grown with. Included by
-# start.kaem; Spack's star-recipes adapter parses it to build those steps, so
-# keep it to one PATH=... line of ${SEED} references.
-PATH=${SEED}/bin:${SEED}/tcc-0.9.26/bin:${SEED}/simple-patch-1.0/bin:${SEED}/mescc-tools-1.7.0/bin:${SEED}/mescc-tools-extra-1.4.0/bin:${SEED}/M2-Mesoplanet-1.13.0/bin:${SEED}/tcc_cc/bin:${SEED}/stack_c/bin
+# start.kaem and step.kaem; shpack's builder reads it for the base of a build's
+# PATH, so keep it to one SEEDPATH=... line of ${SEED} references.
+SEEDPATH=${SEED}/bin:${SEED}/tcc-0.9.26/bin:${SEED}/simple-patch-1.0/bin:${SEED}/mescc-tools-1.7.0/bin:${SEED}/mescc-tools-extra-1.4.0/bin:${SEED}/M2-Mesoplanet-1.13.0/bin:${SEED}/tcc_cc/bin:${SEED}/stack_c/bin

@@ -50,7 +50,12 @@ Each directory holds:
   per-arch trees, ...) referenced as `${PKG}/...`. Some makefiles and patches
   originate from live-bootstrap.
 
-Environment contract (set in `start.kaem`, inherited by every `kaem.run`):
+Environment contract (set in `start.kaem` and, for the base steps, by
+`step.kaem`, inherited by every `kaem.run`). `base.kaem` runs each base step
+as `step.kaem` on its `pkg` and `PREFIX`, and Spack's star-recipes adapter runs
+`step.kaem` too, giving it `ROOT ARCH STORE DISTFILES BUILDDIR SEED pkg PREFIX`
+and `STEPS` (the steps before it, newest first), so the contract below is
+written down once:
 
 | var | value |
 |---|---|
@@ -65,8 +70,9 @@ Environment contract (set in `start.kaem`, inherited by every `kaem.run`):
 | `pkg`, `PKG` | `<name-version>`, `${BOOT}/${pkg}` |
 | `PREFIX`, `BINDIR` | `${STORE}/${pkg}`, `${PREFIX}/bin` |
 
-`PATH` starts as the seed prefixes and grows one `${STORE}/<pkg>/bin` prepend
-per package, newest first -- the same composition rule shpack uses later; its
+`PATH` starts as the seed prefixes (`SEEDPATH`, from `seed.path`) and grows one
+`${STORE}/<pkg>/bin` prepend per package (`STEPS`), newest first -- the same
+composition rule shpack uses later; its
 final value is handed to shpack as `BASEPATH`, and the builder composes the
 same base for every build from the kaem-phase nodes of its DAG.
 

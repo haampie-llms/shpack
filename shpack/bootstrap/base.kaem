@@ -4,6 +4,7 @@
 # and the healed musl 1.1.24 are in the store (unless COMMAND=seed): shpack's
 # tools (sandbox, patch-shebangs, star), then make ... dash, one prefix per
 # package as in start.kaem, and finally the hand-over to the shell phase.
+# Each step is step.kaem on its pkg and PREFIX, which Spack's adapter runs too.
 # Each prefix is ${STORE}/<name>-<version> of the package's recipe (Spack's
 # projection for these unhashed prefixes): the tools have -boot names of their
 # own (make-3.82 is gmake-boot@3.82), apart from the recipes of their modern
@@ -11,116 +12,68 @@
 
 # sandbox: the Landlock build-step launcher (project-original C, statically
 # linked with the just-built tcc+musl). The shell phase wraps every build with
-# it (see concretize.sh emit_dagmk), so it is built here as soon as tcc+musl
+# it (see concretize.star dagmk), so it is built here as soon as tcc+musl
 # exist.
 pkg=sandbox-1.0
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/${pkg}
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # patch-shebangs: rewrites #!/bin/sh shebangs to the store shell so shell-phase
 # builds need no host /bin/sh. Built here for the same reason as sandbox -- as
 # soon as tcc+musl exist.
 pkg=patch-shebangs-1.0
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/${pkg}
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # star: the Starlark interpreter for package.star recipes (see star/). Built
 # here for the same reason as sandbox: tcc+musl is all it needs, and the shell
 # phase evaluates recipes with it from the first concretization on.
 pkg=star-1.0
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/${pkg}
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # tcc 0.9.27 + (float-healed) musl 1.1.24 are now in the store.
 
 # make 3.82: first build tool; everything below builds with a real makefile.
 pkg=make-3.82
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/gmake-boot-3.82
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # patch: every later package applies real unified diffs.
 pkg=patch-2.5.9
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/patch-boot-2.5.9
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 pkg=gzip-1.2.4
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/gzip-boot-1.2.4
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 pkg=tar-1.12
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/tar-boot-1.12
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 pkg=sed-4.0.9
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/sed-boot-4.0.9
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 pkg=bzip2-1.0.8
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/bzip2-boot-1.0.8
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 pkg=coreutils-5.0
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/coreutils-boot-5.0
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # shpack-builder: the shell phase's builder, which every host runs from here.
 pkg=shpack-builder-1.0
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/${pkg}
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # dash: the first shell, installed only in its store prefix (no /bin/sh; the
 # shell phase reaches it via CONFIG_SHELL). See dash-0.5.12/kaem.run.
 pkg=dash-0.5.12
-PKG=${BOOT}/${pkg}
 PREFIX=${STORE}/dash-boot-0.5.12
-BINDIR=${PREFIX}/bin
-mkdir -p ${BINDIR}
-PATH=${BINDIR}:${PATH}
-kaem --verbose --strict --file ${PKG}/kaem.run
+include ${BOOT}/step.kaem
 
 # --- the shell phase -----------------------------------------------------------
 # The base is complete: PATH now holds every kaem-phase prefix (newest first)
@@ -132,5 +85,5 @@ kaem --verbose --strict --file ${PKG}/kaem.run
 BASEPATH=${PATH}
 # Kaem-phase-only variables must not reach the shell phase: Makefiles honour
 # LIBDIR/BINDIR from the environment (zstd's `LIBDIR ?=` broke on it).
-unset ARCH_DIR BINDIR BOOT INCDIR LIBC_PREFIX LIBDIR M2 MESR pkg PKG PREFIX S0 SEED SEEDDIR T
+unset ARCH_DIR BINDIR BOOT INCDIR LIBC_PREFIX LIBDIR M2 MESR pkg PKG PREFIX S0 SEED SEEDDIR SEEDPATH STEPS T
 exec ${STORE}/dash-boot-0.5.12/bin/sh ${ROOT}/shpack/bin/shpack ${COMMAND} ${SPEC}
