@@ -40,9 +40,12 @@ def configure_args(ctx):
     # are passed by --with-DIR (no pkg-config in the base PATH); the wrapper also
     # injects -I/-L/-rpath. Only the backends we ship (openssl/zlib/nghttp2) are
     # enabled; the CA bundle is baked to the ca-certificates pem.
+    # AR=ar: configure looks for $host-ar on PATH and then in /usr/bin and
+    # /usr/local/bin, so a host with a cross ar there would get it baked in.
     t = triple(ctx)
     return [
         "CC=gcc",
+        "AR=ar",
         "--build=" + t,
         "--host=" + t,
         "--with-openssl=" + ctx.dep("openssl").prefix,
