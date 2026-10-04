@@ -4,8 +4,6 @@
 imports unconditionally (spack.util.web -> ssl), so it's required even for
 offline 'spack spec'."""
 
-load("//build_systems/lib.star", "cpu")
-
 homepage = "https://www.openssl.org/"
 license("Apache-2.0")
 
@@ -25,24 +23,22 @@ depends_on("perl", type = "build")
 depends_on("zlib-ng")
 depends_on("gmake", type = "build")
 depends_on("ca-certificates", type = ("build", "run"))
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 def install(ctx):
     perl = ctx.dep("perl").prefix
     return [
-        setenv("CC", ctx.dep("compiler-wrapper").prefix + "/bin/gcc"),
-        prepend_path("PATH", perl + "/bin"),
         # Explicit target ("linux-$m") so Configure never guesses via uname/config.
         # --libdir=lib keeps the libs in lib/ where the wrapper's -L looks; -Wl,-rpath
         # lets them resolve from the store with no LD_LIBRARY_PATH.
-        run(perl + "/bin/perl", "./Configure", "linux-" + cpu(ctx),
+        run(perl + "/bin/perl", "./Configure", "linux-" + ctx.target,
             "--prefix=" + ctx.prefix,
             "--openssldir=" + ctx.prefix + "/ssl",
             "--libdir=lib",

@@ -47,8 +47,8 @@ def configure_args(ctx):
 # build.sh: shell + tcc only.
 def build(ctx):
     return [
-        filter_file("build.cfg", "^AR=.*", "AR='tcc -ar'"),
-        filter_file("build.cfg", "^ARFLAGS=.*", "ARFLAGS='cr'"),
+        filter_file("^AR=.*", "AR='tcc -ar'", "build.cfg"),
+        filter_file("^ARFLAGS=.*", "ARFLAGS='cr'", "build.cfg"),
         run(ctx.sh, "./build.sh"),
         # Sanity: it runs and the fifo jobserver is compiled in.
         run("./make", "--version"),

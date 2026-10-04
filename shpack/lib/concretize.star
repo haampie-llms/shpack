@@ -14,7 +14,10 @@
 #     step              a kaem node's step (kaem-steps): its bootstrap dir, or "seed"
 #     manifest          the package text behind the node's package hash (package_text)
 #   and for built nodes, what the builder takes from the recipe:
-#     sources           "SHA FNAME URL" per distfile: the version's, its resources'
+#     sources           "SHA FNAME URL TARGET" per distfile: the version's
+#                       (TARGET "-"), then its resources (TARGET where it goes
+#                       in the source: DESTINATION/PLACEMENT, or DESTINATION/
+#                       to keep the archive's own directory name)
 #     patches           "FILE LEVEL" per patch that applies to this version and arch
 #     parallel          present, "false", for a recipe that sets parallel = False
 #   and for Spack (lib/spackdb.star, the prefix's .spack/spec.json):
@@ -27,7 +30,8 @@
 #   dag.mk            stamp-per-node makefile, scheduled by make
 #
 # Resolution is the greedy one of Spack's old concretizer, without its
-# backtracking: `name@version` pins that exact version; a bare name is the
+# backtracking: `name@=version` (in a recipe; `name@version` on the command
+# line too) pins that exact version; a bare name is the
 # first version its recipe declares; a recipe always beats an external
 # (cfg["externals"], "name@version prefix" lines), which are the fallback for
 # names with no recipe and for explicit version pins. A version listed in its
@@ -125,6 +129,7 @@ def concretize(host, cfg, specs):
 
     def resolve(spec):
         name, at, want = spec.partition("@")
+        want = want.removeprefix("=")
         rec = record(name)
         if rec:
             for d in versions(rec):
@@ -234,11 +239,12 @@ def concretize(host, cfg, specs):
         return node
 
     def sources(r):
-        """(sha256, fname, url) of the version's source and its resources."""
+        """(sha256, fname, url, target) of the version's source and its resources."""
         ds = record(r.name)["directives"]
-        return [(d["sha256"], d["fname"] or "-", d["url"] or "-") for d in ds
+        return [(d["sha256"], d["fname"] or "-", d["url"] or "-", "-") for d in ds
                 if d["directive"] == "version" and d["version"] == r.version and d["sha256"]] + [
-                (d["sha256"], d["fname"], d["url"] or "-") for d in ds
+                (d["sha256"], d["fname"], d["url"] or "-",
+                 (d["destination"] or ".") + "/" + (d["placement"] or "")) for d in ds
                 if d["directive"] == "resource" and _when_matches(d["when"], r.version)]
 
     def patch_directives(r):
@@ -269,7 +275,7 @@ def concretize(host, cfg, specs):
         """The builder's files from the recipe: sources, patches, parallel."""
         rec = record(r.name)
         files = {
-            "sources": _lines(["%s %s %s" % s for s in sources(r)]),
+            "sources": _lines(["%s %s %s %s" % s for s in sources(r)]),
             "patches": _lines(["%s %d" % (d["file"], d["level"]) for d in patch_directives(r)]),
         }
         if not rec["parallel"]:
@@ -284,7 +290,7 @@ def concretize(host, cfg, specs):
         out = ["package " + r.name, "version " + r.version, "arch " + cfg["arch"]]
         if not rec:
             return _lines(out)   # an external without a recipe
-        out += ["source %s %s" % (sha, fname) for sha, fname, _ in sources(r)]
+        out += ["source %s %s" % (sha, fname) for sha, fname, _, _ in sources(r)]
         for path, sha in host.files(r.name):
             out.append("file %s %s" % (sha, path))
         # A kaem step also depends on the tree it runs: its bootstrap step, and

@@ -26,32 +26,26 @@ depends_on("gcc-boot-wrapper", type = "build")
 depends_on("glibc")
 depends_on("linux-headers")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
-def setup_build_environment(ctx):
-    # libstdc++ #include_next <stdlib.h> etc. must reach glibc's headers.
-    glibc = ctx.dep("glibc").prefix
-    return [
-        setenv("CPLUS_INCLUDE_PATH", glibc + "/include"),
-        setenv("C_INCLUDE_PATH", glibc + "/include"),
-        setenv("LIBRARY_PATH", glibc + "/lib"),
-    ]
+# libstdc++ #include_next <stdlib.h> etc. must reach glibc's headers, which
+# gcc-boot-wrapper puts on CPLUS_INCLUDE_PATH.
 
 def edit(ctx):
     return [
         # libstdc++-v3 configure probes `g++ -v`; no-op it so it can't fail when the
         # compiler binary name differs.
-        substitute("libstdc++-v3/configure", "g++ -v", "true"),
+        filter_file("g++ -v", "true", "libstdc++-v3/configure", string = True),
         # `date > stamp-*` just touches a make stamp; `date` isn't in the seed
         # coreutils and a real timestamp is non-reproducible -- use `touch`.
-        substitute("libstdc++-v3/src/Makefile.in", "date > stamp", "touch stamp"),
+        filter_file("date > stamp", "touch stamp", "libstdc++-v3/src/Makefile.in", string = True),
     ]
 
 def install(ctx):

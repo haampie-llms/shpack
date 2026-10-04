@@ -21,20 +21,20 @@ build_system("autotools")
 depends_on("gcc-boot1", type = "build")
 depends_on("binutils-boot0", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
-depends_on("tar@1.35-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
 depends_on("m4", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
 depends_on("dash-boot", type = "build")
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     # No host flex; bison ships its generated scanners, so the only obstacle is
     # AC_PROG_LEX fatally running $LEX. Preseed to short-circuit it.
-    return [setenv("ac_cv_prog_lex_root", "lex.yy")]
+    env.set("ac_cv_prog_lex_root", "lex.yy")
 
 def configure_args(ctx):
     # CFLAGS=-O2 drops autotools' default -g: -g would leak the build cwd as the

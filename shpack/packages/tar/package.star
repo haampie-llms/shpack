@@ -34,12 +34,12 @@ build_system("autotools")
 when("@=1.35", [
     depends_on("compiler-wrapper", type = "build"),
     depends_on("gmake", type = "build"),
-    depends_on("sed@4.9-musl", type = "build"),
+    depends_on("sed@=4.9-musl", type = "build"),
     depends_on("grep-boot", type = "build"),
-    depends_on("gawk@5.3.1", type = "build"),
+    depends_on("gawk@=5.3.1", type = "build"),
     depends_on("diffutils", type = "build"),
     depends_on("findutils", type = "build"),
-    depends_on("xz@5.2.5-musl", type = "build"),
+    depends_on("xz@=5.2.5-musl", type = "build"),
     depends_on("dash", type = "build"),
 ])
 
@@ -55,10 +55,10 @@ when("@=1.35-musl", [
     depends_on("dash-boot", type = "build"),
 ])
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     # tar's configure refuses to run as root unless told the rmt setup is
     # intentional; belt-and-suspenders since the chroot drops to the real uid.
-    return [setenv("FORCE_UNSAFE_CONFIGURE", "1")]
+    env.set("FORCE_UNSAFE_CONFIGURE", "1")
 
 def edit(ctx):
     # tar runs compressors via a hardcoded execv("/bin/sh", -c) in src/system.c;

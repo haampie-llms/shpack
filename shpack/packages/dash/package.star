@@ -23,18 +23,18 @@ build_system("autotools")
 # glibc here is the throwaway 2.43-boot (the final 2.43 depends on this dash, so
 # linking it against 2.43 would be a cycle). binutils provides as/ld.
 depends_on("gcc-boot2", type = "build")
-depends_on("glibc@2.43-boot")
+depends_on("glibc@=2.43-boot")
 depends_on("binutils-boot1", type = "build")
 depends_on("gmake", type = "build")
 # Built with the bootstrap dash; `dash-boot` names that kaem-phase prefix,
 # since a package cannot depend on (another version of) itself in Spack.
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash-boot", type = "build")
 
 def configure_args(ctx):

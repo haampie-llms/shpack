@@ -205,15 +205,15 @@ several versions with different pinned deps:
 ```python
 version("4.7-2013.11", sha256 = "...", url = "...")
 version("8.5.0", sha256 = "...", url = "...")
-depends_on("mpfr@2.4.2", when = "@=4.7-2013.11")
+depends_on("mpfr@=2.4.2", when = "@=4.7-2013.11")
 when("@=8.5.0", [                   # Spack's `with when("@=8.5.0"):`
-    depends_on("mpfr@3.1.6"),
+    depends_on("mpfr@=3.1.6"),
     depends_on("gmake", type = "build"),
 ])
 ```
 
 Evaluation is pure. A recipe sees only its own text, the modules it loads
-and the build context `ctx`: name, version, arch, prefix, `sh` (the store
+and the build context `ctx`: name, version, target, prefix, `sh` (the store
 shell), `makejobs`, the stage paths, `ctx.dep(name).prefix` and
 `ctx.satisfies(when)`. It cannot touch the file system or run anything
 itself; it returns actions. [star/PROTOCOL.md](star/PROTOCOL.md) is the full
@@ -233,14 +233,18 @@ autotools_install = "install")`):
 |---|---|---|
 | `generic` | `edit install` (install required) | -- |
 | `makefile` | `edit build install` | `build_targets`, `install_targets` |
-| `autotools` | `edit configure build install` | `configure_args`, `build_args`, `install_targets` |
+| `autotools` | `edit configure build install` | `configure_args`, `build_targets`, `install_targets` |
 
-A phase returns a list of actions: `run(...)`, `setenv`/`prepend_path`,
-`chdir`, `mkdir`, `copy`, `move`, `remove`, `symlink`, `write_file`,
-`substitute` (literal), `filter_file` (a regex subset that means the same in
-sed and Python), and a few more. `setup_build_environment(ctx)` runs first
-and may only set environment variables. When a build step has to inspect
-build output, `sh(script)` is the escape hatch; t-lint counts its uses.
+A phase returns a list of actions: `run(...)`, `chdir`, `mkdir`, `copy`,
+`move`, `remove`, `symlink`, `write_file`, `filter_file` (Spack's signature;
+a regex subset that means the same in sed and Python, or a literal with
+`string = True`), and a few more. The environment is set up before the phases
+run, by Spack's hooks: each dependency's
+`setup_dependent_build_environment(ctx, env, dependent)` (so
+`compiler-wrapper` sets `CC` for the packages it compiles), then the recipe's
+`setup_build_environment(ctx, env)`, both recording `env.set(...)`,
+`env.prepend_path(...)` and the like. When a build step has to inspect build
+output, `sh(script)` is the escape hatch; t-lint counts its uses.
 
 `star plan` renders the actions as a plain script (`$VAR/spec/<id>/build.sh`,
 kept in the prefix as `.spack/shpack-build.sh`), which the builder sources, so what
@@ -252,7 +256,7 @@ The concretizer is Starlark too ([shpack/lib/concretize.star](shpack/lib/concret
 run by `star concretize`: a pure function from the recipes, their file hashes
 and the externals to the state files and `dag.mk`, in the spirit of Spack's
 old greedy concretizer rather than its solver. `shpack install <name>` resolves names to concrete versions (the first version
-a recipe declares wins; `name@version` pins; the externals table is the fallback
+a recipe declares wins; `name@=version` pins; the externals table is the fallback
 for names without a recipe), walks `depends_on` into a
 DAG, and assigns every node a Merkle hash: Spack's DAG hash of the node as
 Spack records it, whose package hash covers the recipe text, auxiliary files,

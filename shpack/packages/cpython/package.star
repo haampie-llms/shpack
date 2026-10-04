@@ -5,7 +5,7 @@ clingo and Spack. Distinct from the musl 'python' 3.5.9 used only to bootstrap
 glibc."""
 
 load("//build_systems/autotools.star", autotools_build = "build")
-load("//build_systems/lib.star", "cpu", "replace_bin_sh", "triple", "uname_shim")
+load("//build_systems/lib.star", "replace_bin_sh", "triple", "uname_shim", "uname_shim_dir")
 
 homepage = "https://www.python.org/"
 license("Python-2.0")
@@ -29,12 +29,12 @@ depends_on("bzip2")
 depends_on("xz")
 depends_on("zstd")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
 depends_on("dash", type = "build")
 
 def edit(ctx):
@@ -49,23 +49,19 @@ def edit(ctx):
         # jobserver: the rule runs the interpreter (imports json -> _json.so) but only
         # depends on pybuilddir.txt, so it may race sharedmods writing that .so. Order
         # it after sharedmods. Unconfirmed; cf. cpython#102007.
-        filter_file("Makefile.pre.in", "^build-details\\.json: pybuilddir\\.txt$",
-                    "build-details.json: pybuilddir.txt sharedmods"),
+        filter_file("^build-details\\.json: pybuilddir\\.txt$",
+                    "build-details.json: pybuilddir.txt sharedmods", "Makefile.pre.in"),
     ]
 
-def setup_build_environment(ctx):
-    wrapper = ctx.dep("compiler-wrapper").prefix
-    return [
-        setenv("CC", wrapper + "/bin/gcc"),
-        setenv("CXX", wrapper + "/bin/g++"),
-        # PYTHONHASHSEED=0 pins marshal order of set/frozenset literals in .pyc.
-        setenv("PYTHONHASHSEED", "0"),
-        # userbase defaults to $HOME/.local, leaking the per-build scratch path into
-        # _sysconfig_vars json; pin it (honored since build() strips -E from
-        # PYTHON_FOR_BUILD). The live interpreter still recomputes it from real $HOME.
-        setenv("PYTHONUSERBASE", "/homeless-shelter"),
-        setenv("_PYTHON_HOST_PLATFORM", "linux-" + cpu(ctx)),
-    ]
+def setup_build_environment(ctx, env):
+    env.prepend_path("PATH", uname_shim_dir(ctx))
+    # PYTHONHASHSEED=0 pins marshal order of set/frozenset literals in .pyc.
+    env.set("PYTHONHASHSEED", "0")
+    # userbase defaults to $HOME/.local, leaking the per-build scratch path into
+    # _sysconfig_vars json; pin it (honored since build() strips -E from
+    # PYTHON_FOR_BUILD). The live interpreter still recomputes it from real $HOME.
+    env.set("PYTHONUSERBASE", "/homeless-shelter")
+    env.set("_PYTHON_HOST_PLATFORM", "linux-" + ctx.target)
 
 def configure_args(ctx):
     # Explicit triple (no date/uname for config.guess). --enable-shared installs
@@ -95,7 +91,8 @@ def build(ctx):
     # Drop -E so the install's compileall honors PYTHONHASHSEED (env is already
     # clean under env -i); pins set/frozenset marshal order in the .pyc.
     return [
-        substitute("Makefile", "PYTHON_FOR_BUILD=./$(BUILDPYTHON) -E", "PYTHON_FOR_BUILD=./$(BUILDPYTHON)"),
+        filter_file("PYTHON_FOR_BUILD=./$(BUILDPYTHON) -E", "PYTHON_FOR_BUILD=./$(BUILDPYTHON)",
+                    "Makefile", string = True),
     ] + autotools_build(ctx)
 
 def install(ctx):
@@ -104,13 +101,13 @@ def install(ctx):
         # COVERAGE_INFO/RUNSHARED/TESTRUNNER bake the abs build dir into these
         # dev/test-only vars (no configure lever). Scrub before install so compileall
         # bakes the scrubbed bytes into the .pyc.
-        substitute("./**/_sysconfigdata_*.py", ctx.stage_dir, "/build"),
-        substitute("./**/_sysconfig_vars_*.json", ctx.stage_dir, "/build"),
+        filter_file(ctx.stage_dir, "/build", "./**/_sysconfigdata_*.py", string = True),
+        filter_file(ctx.stage_dir, "/build", "./**/_sysconfig_vars_*.json", string = True),
         # -j1: libainstall races the compileall over the same lib tree, so
         # config-*/__pycache__ is nondeterministic. cf. cpython#102007.
         run("make", "install", "-j1", "COMPILEALL_OPTS=-j%d" % ctx.jobs),
         symlink("python3.14", ctx.prefix + "/bin/python3", if_missing = True),
         remove(lib + "/test", recursive = True),
         # config Makefile has no .pyc; scrub it after install.
-        substitute(lib + "/config-3.14*-linux-*/Makefile", ctx.stage_dir, "/build"),
+        filter_file(ctx.stage_dir, "/build", lib + "/config-3.14*-linux-*/Makefile", string = True),
     ]

@@ -19,6 +19,16 @@ depends_on("binutils-boot1", type = ("build", "run"))
 # The gcc/g++ shims are #!$sh scripts, so the clean glibc dash is a runtime dep.
 depends_on("dash", type = "build")
 
+def setup_dependent_build_environment(ctx, env, dependent):
+    # The wrapped gcc-boot2 was built --without-headers: its dependents compile
+    # with this wrapper, and against glibc's headers and libraries.
+    glibc = ctx.dep("glibc").prefix
+    env.set("CC", ctx.prefix + "/bin/gcc")
+    env.set("CXX", ctx.prefix + "/bin/g++")
+    env.prepend_path("C_INCLUDE_PATH", glibc + "/include")
+    env.prepend_path("CPLUS_INCLUDE_PATH", glibc + "/include")
+    env.prepend_path("LIBRARY_PATH", glibc + "/lib")
+
 def install(ctx):
     gcc = ctx.dep("gcc-boot2").prefix
     glibc = ctx.dep("glibc").prefix

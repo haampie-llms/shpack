@@ -28,57 +28,51 @@ depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
 depends_on("gcc-boot1", type = "build")
 depends_on("binutils-boot1", type = ("build", "run"))
-depends_on("sed@4.9-musl", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("dash-boot", type = "build")
 
 # GCC 16's download_prerequisites set (newer gmp/mpfr/mpc), in-tree.
 resource(
     url = "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2",
     sha256 = "ac28211a7cfb609bae2e2c8d6058d66c8fe96434f740cf6fe2e47b000d1c20cb",
+    placement = "gmp",
 )
 resource(
     url = "https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.bz2",
     sha256 = "b9df93635b20e4089c29623b19420c4ac848a1b29df1cfd59f26cab0d2666aa0",
+    placement = "mpfr",
 )
 resource(
     url = "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz",
     sha256 = "ab642492f5cf882b74aa0cb730cd410a81edcdbec895183ce930e706c1c759b8",
+    placement = "mpc",
 )
 
 def edit(ctx):
-    # Relocate the flat-unpacked gmp/mpfr/mpc resources into the GCC tree for
-    # auto-detection. cwd is the gcc source dir (it sorts first).
-    actions = []
-    for p in ["gmp", "mpfr", "mpc"]:
-        actions += [
-            move(ctx.stage_dir + "/" + p + "-*/", "./" + p),
-            # The bundled config.sub/guess predate musl; overwrite with GCC's
-            # pair. mpc ships them read-only (555); cp -f unlinks and retries.
-            copy(["config.sub", "config.guess"], "./" + p + "/", force = True),
-        ]
-    return actions
+    # The resources' bundled config.sub/guess predate musl; overwrite with
+    # GCC's pair. mpc ships them read-only (555); cp -f unlinks and retries.
+    return [copy(["config.sub", "config.guess"], "./" + p + "/", force = True)
+            for p in ["gmp", "mpfr", "mpc"]]
 
-def setup_build_environment(ctx):
-    return [
-        # gmp's AC_PROG_LEX fatally runs flex if on PATH; flex is only used by
-        # gmp demos, so skip the probe.
-        setenv("ac_cv_prog_lex_root", "lex.yy"),
-        # Force inhibit_libc: a native --without-headers build would otherwise
-        # use a target libc; true makes libgcc build the minimal no-libc set.
-        setenv("inhibit_libc", "true"),
-        # Env-set to keep $stage_dir out of TOPLEVEL_CONFIGURE_ARGUMENTS.
-        # file_prefix_map goes in CPPFLAGS, not CFLAGS/CXXFLAGS: genchecksum
-        # hashes ALL_LINKERFLAGS (= ALL_CXXFLAGS) into cc1's checksum but not
-        # ALL_CPPFLAGS, so the scratch path never enters the hash.
-        setenv("CFLAGS", "-O2"),
-        setenv("CXXFLAGS", "-O2"),
-        setenv("CPPFLAGS", ctx.file_prefix_map),
-        setenv("CFLAGS_FOR_TARGET", "-O2 " + ctx.file_prefix_map),
-        setenv("CXXFLAGS_FOR_TARGET", "-O2 " + ctx.file_prefix_map),
-    ]
+def setup_build_environment(ctx, env):
+    # gmp's AC_PROG_LEX fatally runs flex if on PATH; flex is only used by
+    # gmp demos, so skip the probe.
+    env.set("ac_cv_prog_lex_root", "lex.yy")
+    # Force inhibit_libc: a native --without-headers build would otherwise
+    # use a target libc; true makes libgcc build the minimal no-libc set.
+    env.set("inhibit_libc", "true")
+    # Env-set to keep $stage_dir out of TOPLEVEL_CONFIGURE_ARGUMENTS.
+    # file_prefix_map goes in CPPFLAGS, not CFLAGS/CXXFLAGS: genchecksum
+    # hashes ALL_LINKERFLAGS (= ALL_CXXFLAGS) into cc1's checksum but not
+    # ALL_CPPFLAGS, so the scratch path never enters the hash.
+    env.set("CFLAGS", "-O2")
+    env.set("CXXFLAGS", "-O2")
+    env.set("CPPFLAGS", ctx.file_prefix_map)
+    env.set("CFLAGS_FOR_TARGET", "-O2 " + ctx.file_prefix_map)
+    env.set("CXXFLAGS_FOR_TARGET", "-O2 " + ctx.file_prefix_map)
 
 # --prefix and --disable-dependency-tracking come from the autotools configure.
 def configure_args(ctx):
@@ -120,8 +114,7 @@ def configure_args(ctx):
         "--disable-nls",
     ]
 
-def build_args(ctx):
-    return ["MAKEINFO=true"]
+build_targets = ["MAKEINFO=true"]
 
 def install(ctx):
     # glibc links libgcc_eh; the crippled build only makes libgcc.a (which

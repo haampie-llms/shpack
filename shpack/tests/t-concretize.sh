@@ -25,7 +25,7 @@ mkstar tool <<'EOF'
 """toy root"""
 version("0.5")
 build_system("generic")
-depends_on("libb@2.1")
+depends_on("libb@=2.1")
 depends_on("liba")
 depends_on("ext")
 def install(ctx):

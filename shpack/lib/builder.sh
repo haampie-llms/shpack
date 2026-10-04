@@ -72,17 +72,18 @@ direct_dep() {
 # in that same order (every kaem step depends on the ones before it, so this
 # is the chain, newest first) and the seed's PATH (bootstrap/seed.path).
 
-# post_order ID -- append ID's dependencies to $ORDER (" ID ID ... "), each
-# after its own dependencies, first visit wins.
-post_order() {
-    local d t
+# post_order_into VAR ID -- append ID's dependencies to $VAR (" ID ID ... "),
+# each after its own dependencies, first visit wins.
+post_order_into() {
+    local d t cur
     while read -r d t; do
-        case $ORDER in
+        eval "cur=\$$1"
+        case $cur in
             *" $d "*) continue ;;
         esac
-        post_order "$d"
-        ORDER="$ORDER$d "
-    done < "$VAR/spec/$1/edges"
+        post_order_into "$1" "$d"
+        eval "$1=\"\$$1\$d \""
+    done < "$VAR/spec/$2/edges"
 }
 
 # runs ID -- add to $RUNS what a dependent may run through ID: its run
@@ -122,17 +123,40 @@ seed_path() {
     die "seed.path has no SEEDPATH= line"
 }
 
-# compose_env -- PATH, CONFIG_SHELL, STAR and PATCH_SHEBANGS of this build.
+# links ID -- add to $SETUP ID's link dependencies, and theirs.
+links() {
+    local d t
+    while read -r d t; do
+        case ,$t, in
+            *,link,*)
+                case $SETUP in *" $d "*) continue ;; esac
+                SETUP="$SETUP$d "
+                links "$d" ;;
+        esac
+    done < "$VAR/spec/$1/edges"
+}
+
+# compose_env -- PATH, CONFIG_SHELL, STAR and PATCH_SHEBANGS of this build,
+# and $SETUP, the dependencies that set up its environment
+# (setup_dependent_build_environment): as in Spack, the direct build (and
+# test) dependencies, and the link dependencies, through link edges.
 # A host that has no kaem-phase nodes (the test fixture) passes the base as
 # $BASEPATH and its tools as $CONFIG_SHELL, $STAR and $PATCH_SHEBANGS.
 compose_env() {
     local d t c p kind path base seed
     ORDER=' '
-    post_order "$id"
-    RUNS=' '
+    post_order_into ORDER "$id"
+    RUNS=' ' SETUP=' '
     while read -r d t; do
         case ,$t, in
             *,build,*|*,test,*) RUNS="$RUNS$d "; runs "$d" ;;
+        esac
+        case ,$t, in
+            *,build,*|*,test,*|*,link,*)
+                case $SETUP in *" $d "*) ;; *) SETUP="$SETUP$d " ;; esac ;;
+        esac
+        case ,$t, in
+            *,link,*) links "$d" ;;
         esac
     done < "$SPEC/edges"
     path= base= seed=
@@ -204,7 +228,7 @@ star_str() {
 
 # write_ctx -- the build context of this node as a Starlark file (ctx.star).
 write_ctx() {
-    local k v d dn seen f first
+    local k v d dn seen f first t DIRECT DORDER
     printf 'ctx = {\n'
     for k in name version id arch prefix sh stage_dir source_dir package_dir \
              file_prefix_map debug_prefix_map; do
@@ -242,6 +266,30 @@ write_ctx() {
         printf '        %s: %s,\n' "$(star_str "$dn")" "$(star_str "$(rd "$VAR/spec/$d/prefix")")"
     done < "$SPEC/deps.all"
     printf '    },\n'
+    # The dependencies whose setup_dependent_build_environment applies, in
+    # $ORDER (dependencies before dependents, so dependents override), each
+    # with its own deps for its ctx.dep(): direct ones, then its closure.
+    printf '    "env_deps": [\n'
+    for d in $ORDER; do
+        case $SETUP in *" $d "*) ;; *) continue ;; esac
+        dn=$(rd "$VAR/spec/$d/name")
+        printf '        {"name": %s, "version": %s, "id": %s, "prefix": %s, "deps": {' \
+            "$(star_str "$dn")" "$(star_str "${d#"$dn"-}")" "$(star_str "$d")" \
+            "$(star_str "$(rd "$VAR/spec/$d/prefix")")"
+        DIRECT=
+        while read -r f t; do DIRECT="$DIRECT $f"; done < "$VAR/spec/$d/edges"
+        DORDER=' '
+        post_order_into DORDER "$d"
+        seen=' '
+        for f in $DIRECT $DORDER; do
+            k=$(rd "$VAR/spec/$f/name")
+            case $seen in *" $k "*) continue ;; esac
+            seen="$seen$k "
+            printf '%s: %s, ' "$(star_str "$k")" "$(star_str "$(rd "$VAR/spec/$f/prefix")")"
+        done
+        printf '}},\n'
+    done
+    printf '    ],\n'
     printf '}\n'
 }
 
@@ -286,22 +334,64 @@ unpack() {
     esac
 }
 
+# do_stage -- unpack the sources ($SPEC/sources) as Spack stages them: the
+# version's archive into the stage directory, whose first directory is the
+# source directory; then each resource into the source directory, at its
+# TARGET (place_resource).
 do_stage() {
-    local sha fname url d
+    local sha fname url target d
     cd "$stage_dir"
-    while read -r sha fname url; do
-        unpack "$DISTFILES/$fname"
-    done < "$SPEC/sources"
-    # The source directory is the single directory the (first) tarball
-    # created; sourceless packages build in the stage dir itself.
     source_dir=$stage_dir
-    for d in *; do
-        if [ -d "$d" ]; then
-            source_dir=$stage_dir/$d
-            break
-        fi
-    done
+    while read -r sha fname url target; do
+        case ${target:--} in
+            -)
+                unpack "$DISTFILES/$fname"
+                # The source directory is the single directory the tarball
+                # created; sourceless packages build in the stage dir itself.
+                for d in *; do
+                    if [ -d "$d" ]; then
+                        source_dir=$stage_dir/$d
+                        break
+                    fi
+                done ;;
+            *) place_resource "$fname" "$target" ;;
+        esac
+    done < "$SPEC/sources"
     cd "$source_dir"
+}
+
+# place_resource FNAME TARGET -- unpack a resource and move it to
+# $source_dir/TARGET: TARGET is DESTINATION/PLACEMENT, or DESTINATION/ to keep
+# the name of the archive's directory. What moves is that directory, or all of
+# the archive if it has more than one entry. An empty directory at the target
+# (a submodule's, in a git archive) is replaced.
+place_resource() {
+    local tmp src dest
+    tmp=$stage_dir/.resource
+    rm -rf "$tmp"
+    mkdir "$tmp"
+    cd "$tmp"
+    unpack "$DISTFILES/$1"
+    set -- "$1" "$2" *
+    if [ $# = 3 ] && [ -d "$3" ]; then
+        src=$tmp/$3
+    else
+        src=$tmp
+    fi
+    case $2 in
+        */) [ "$src" != "$tmp" ] || die "resource $1 has no single directory; give it a placement"
+            dest=$source_dir/$2${src##*/} ;;
+        *) dest=$source_dir/$2 ;;
+    esac
+    if [ -d "$dest" ]; then
+        rmdir "$dest" || die "resource $1: $dest exists"
+    elif [ -e "$dest" ]; then
+        die "resource $1: $dest exists"
+    fi
+    mkdir -p "${dest%/*}"
+    mv "$src" "$dest"
+    cd "$stage_dir"
+    rm -rf "$tmp"
 }
 
 # do_patch -- apply $SPEC/patches ("FILE LEVEL": the recipe's patches that

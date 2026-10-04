@@ -4,9 +4,10 @@
 # recipe ships as files/Makefile (the bootstrap pattern for packages whose own
 # build system needs tools that do not exist yet).
 #
-# Hooks: build_targets, install_targets (extra make arguments). make is
-# always run with -f Makefile: some tarballs ship a GNUmakefile, which GNU
-# make would otherwise prefer over a replacement Makefile.
+# Hooks, as in Spack: build_targets, install_targets (extra make arguments;
+# lists, or functions of ctx). make is always run with -f Makefile: some
+# tarballs ship a GNUmakefile, which GNU make would otherwise prefer over a
+# replacement Makefile.
 
 load("//build_systems/lib.star", "hook")
 

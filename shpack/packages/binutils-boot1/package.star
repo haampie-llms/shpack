@@ -23,17 +23,17 @@ depends_on("gcc-boot1", type = "build")
 depends_on("binutils-boot0", type = "build")
 depends_on("gmake", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
-depends_on("sed@4.9-musl", type = "build")
-depends_on("tar@1.35-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
 depends_on("findutils", type = "build")
 depends_on("dash-boot", type = "build")
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     # Generated parsers ship and no flex exists; preseed to short-circuit
     # AC_PROG_LEX, which would otherwise fatally run $LEX.
-    return [setenv("ac_cv_prog_lex_root", "lex.yy")]
+    env.set("ac_cv_prog_lex_root", "lex.yy")
 
 def configure_args(ctx):
     t = triple(ctx)
@@ -68,8 +68,7 @@ def configure_args(ctx):
         "--disable-shared",
     ]
 
-def build_args(ctx):
-    return ["MAKEINFO=true"]
+build_targets = ["MAKEINFO=true"]
 
 def install(ctx):
     t = triple(ctx)

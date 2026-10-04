@@ -62,6 +62,7 @@ version("2.0", sha256 = "$sha", url = "http://example.invalid/atpkg-2.0.tar.gz")
 build_system("autotools")
 depends_on("dash")
 parallel = False
+build_targets = ["V=1"]
 def configure_args(ctx):
     # arguments may contain spaces
     return ["--disable-nls", "--enable-static", "CXXCPP=tcc -E"]
@@ -98,6 +99,23 @@ EOF2
 mkdir -p "$SHPACK_REPO/bspkg/files"
 cp "$SHPACK_REPO/mkpkg/files/Makefile" "$SHPACK_REPO/bspkg/files/Makefile"
 
+# a dependency that sets up its dependents' environment
+mkstar envdep <<'EOF2'
+version("1.0")
+build_system("generic")
+depends_on("dash")
+def setup_dependent_build_environment(ctx, env, dependent):
+    env.set("FROM_DEP", ctx.name + "@" + ctx.version + ">" + dependent.name)
+    env.prepend_path("ACT_PATH", "/dep")
+def install(ctx):
+    return []
+EOF2
+
+# a resource, placed in the source tree as Spack places it
+mkdir -p "$TESTDIR/src/resdir-2.0"
+printf 'res\n' > "$TESTDIR/src/resdir-2.0/file"
+rsha=$(tarball resdir-2.0)
+
 # generic: every action kind
 mkdir -p "$TESTDIR/src/actpkg-1.0/sub/deep" "$TESTDIR/src/actpkg-1.0/res-9"
 cat > "$TESTDIR/src/actpkg-1.0/hard.txt" <<'EOF2'
@@ -113,19 +131,25 @@ sha=$(tarball actpkg-1.0)
 mkstar actpkg <<EOF2
 load("//build_systems/lib.star", "replace_bin_sh")
 version("1.0", sha256 = "$sha", url = "http://example.invalid/actpkg-1.0.tar.gz")
+resource(url = "http://example.invalid/resdir-2.0.tar.gz", sha256 = "$rsha",
+         destination = "sub", placement = "placed")
 build_system("generic")
 depends_on("dash")
+depends_on("envdep", type = "build")
 
-def setup_build_environment(ctx):
-    return [setenv("ACT_A", "it's \$literal"), prepend_path("ACT_PATH", "/x"),
-            prepend_path("ACT_PATH", "/y"), unsetenv("ACT_GONE")]
+def setup_build_environment(ctx, env):
+    env.set("ACT_A", "it's \$literal")
+    env.prepend_path("ACT_PATH", "/x")
+    env.prepend_path("ACT_PATH", "/y")
+    env.append_path("ACT_PATH", "/z")
+    env.unset("ACT_GONE")
 
 def edit(ctx):
     return [
         replace_bin_sh(ctx, "hard.txt"),
-        substitute("hard.txt", "MARKER a.b [x] \$y & \\\\z", "edited & \\\\ | #"),
-        filter_file("hard.txt", "^version = .*\$", "version = " + ctx.version),
-        filter_file("sub/**/Makefile.in", "^one\$", "two"),
+        filter_file("MARKER a.b [x] \$y & \\\\z", "edited & \\\\ | #", "hard.txt", string = True),
+        filter_file("^version = .*\$", "version = " + ctx.version, "hard.txt"),
+        filter_file("^one\$", "two", "sub/**/Makefile.in"),
         move("res-*", "moved"),
     ]
 
@@ -136,12 +160,13 @@ def install(ctx):
         copy("hard.txt", share + "/hard.txt"),
         copy("sub", share + "/sub", recursive = True),
         copy("moved/file", share + "/moved"),
+        copy("sub/placed/file", share + "/placed"),
         write_file(share + "/tool", "#!" + ctx.sh + "\necho 'hi' \"\$1\"\n", mode = "755"),
         append_file(share + "/tool", "# appended\n"),
         symlink("tool", share + "/tool-link"),
         symlink("elsewhere", share + "/tool", if_missing = True),
         hardlink(share + "/tool", share + "/tool-hard"),
-        run("sh", "-c", "echo \$ACT_A:\$ACT_PATH:\${ACT_GONE-unset}:\$RUNVAR:\$(pwd)",
+        run("sh", "-c", "echo \$ACT_A:\$ACT_PATH:\${ACT_GONE-unset}:\$RUNVAR:\$FROM_DEP:\$(pwd)",
             env = {"RUNVAR": "rv"}, cwd = share + "/d1", stdout = share + "/run.out"),
         sh("echo piped | tr a-z A-Z > '" + share + "/sh.out'"),
         chdir(share + "/d2"),
@@ -163,7 +188,7 @@ assert_contains "$out" "--prefix=$ap"
 assert_contains "$out" "--disable-nls"
 assert_contains "$out" "CXXCPP=tcc -E"
 assert_contains "$out" "CONFIG_SHELL=$TEST_DASH_SH"
-assert_contains "$ap/.spack/shpack-build.sh" "make SHELL=$TEST_DASH_SH -j1"
+assert_contains "$ap/.spack/shpack-build.sh" "make SHELL=$TEST_DASH_SH -j1 V=1"
 
 oout=$op/share/out.txt
 assert_contains "$oout" "/_build/sub"
@@ -188,7 +213,9 @@ assert_eq "$("$X/tool" x)" "hi x" "write_file content and mode"
 assert_contains "$X/tool" "# appended"
 assert_eq "$(readlink "$X/tool-link")" tool "symlink"
 assert_file "$X/tool-hard"
-assert_eq "$(cat "$X/run.out")" "it's \$literal:/y:/x:unset:rv:$X/d1" "run env/cwd/stdout + persistent env"
+assert_eq "$(cat "$X/run.out")" "it's \$literal:/y:/x:/dep:/z:unset:rv:envdep@1.0>actpkg:$X/d1" \
+    "run env/cwd/stdout + the environment hooks"
+assert_eq "$(cat "$X/placed")" res "resource placement"
 assert_eq "$(cat "$X/sh.out")" PIPED "sh escape hatch"
 assert_file "$X/d2/here"
 [ ! -e "$X/d1" ] || fail "remove(recursive) left d1"

@@ -36,12 +36,12 @@ depends_on("gmake", type = "build")
 depends_on("python", type = "build")
 depends_on("bison", type = "build")
 depends_on("m4", type = "build")
-depends_on("sed@4.9-musl", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("grep-boot", type = "build")
 depends_on("diffutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 # glibc bakes a dash into its shipped scripts (ldd, mtrace, ...). 2.43 ships the
 # clean dash; 2.43-boot breaks the dash->glibc cycle, so it uses the bootstrap
 # dash (dash-boot, built by the kaem phase, hence no cycle). $sh follows whichever is

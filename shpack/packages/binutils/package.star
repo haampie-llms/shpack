@@ -24,38 +24,32 @@ depends_on("glibc")
 depends_on("linux-headers")
 depends_on("libstdcxx-boot1")
 depends_on("binutils-boot1", type = "build")
-depends_on("zlib-ng@2.3.3-boot")
-depends_on("zstd@1.5.7-boot")
+depends_on("zlib-ng@=2.3.3-boot")
+depends_on("zstd@=1.5.7-boot")
 depends_on("bison", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
 depends_on("findutils", type = "build")
 depends_on("dash", type = "build")
 
-def setup_build_environment(ctx):
-    # glibc headers/libs for the wrapped boot compiler. gprofng is C++ but
-    # gcc-boot2 was --disable-libstdc++-v3, so supply libstdcxx-boot1's C++
-    # headers (the triple subdir has bits/c++config.h).
-    glibc = ctx.dep("glibc").prefix
+def setup_build_environment(ctx, env):
+    # gcc-boot-wrapper puts glibc's headers/libs on the paths; add zlib-ng's and
+    # zstd's. gprofng is C++ but gcc-boot2 was --disable-libstdc++-v3, so supply
+    # libstdcxx-boot1's C++ headers (the triple subdir has bits/c++config.h).
     libstdcxx = ctx.dep("libstdcxx-boot1").prefix
-    zlib = ctx.dep("zlib-ng").prefix
-    zstd = ctx.dep("zstd").prefix
-    t = triple(ctx)
-    return [
-        # Generated parsers ship and no flex exists; preseed to short-circuit
-        # AC_PROG_LEX, which would otherwise fatally run $LEX.
-        setenv("ac_cv_prog_lex_root", "lex.yy"),
-        setenv("C_INCLUDE_PATH", ":".join([glibc + "/include", zlib + "/include", zstd + "/include"])),
-        setenv("CPLUS_INCLUDE_PATH", ":".join([
-            libstdcxx + "/include", libstdcxx + "/include/" + t, glibc + "/include",
-            zlib + "/include", zstd + "/include",
-        ])),
-        setenv("LIBRARY_PATH", ":".join([glibc + "/lib", zlib + "/lib", zstd + "/lib"])),
-    ]
+    # Generated parsers ship and no flex exists; preseed to short-circuit
+    # AC_PROG_LEX, which would otherwise fatally run $LEX.
+    env.set("ac_cv_prog_lex_root", "lex.yy")
+    env.prepend_path("CPLUS_INCLUDE_PATH", libstdcxx + "/include/" + triple(ctx))
+    env.prepend_path("CPLUS_INCLUDE_PATH", libstdcxx + "/include")
+    for d in ["zlib-ng", "zstd"]:
+        env.append_path("C_INCLUDE_PATH", ctx.dep(d).prefix + "/include")
+        env.append_path("CPLUS_INCLUDE_PATH", ctx.dep(d).prefix + "/include")
+        env.append_path("LIBRARY_PATH", ctx.dep(d).prefix + "/lib")
 
 def configure_args(ctx):
     t = triple(ctx)
@@ -97,8 +91,7 @@ def configure_args(ctx):
         "--enable-default-compressed-debug-sections-algorithm=zlib",
     ]
 
-def build_args(ctx):
-    return ["MAKEINFO=true"]
+build_targets = ["MAKEINFO=true"]
 
 def install(ctx):
     return [run("make", "install", "MAKEINFO=true")]

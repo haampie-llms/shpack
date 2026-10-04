@@ -31,12 +31,12 @@ depends_on("libarchive")
 depends_on("libuv")
 depends_on("librhash")
 depends_on("jsoncpp")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
 depends_on("dash", type = "build")
 
 def edit(ctx):
@@ -45,22 +45,20 @@ def edit(ctx):
     return [replace_bin_sh(ctx, ["Source/cmLocalUnixMakefileGenerator3.cxx",
                                  "Source/cmExecProgramCommand.cxx"])]
 
-def install(ctx):
-    wrapper = ctx.dep("compiler-wrapper").prefix
+def setup_build_environment(ctx, env):
+    # Vendored cppdap needs _GNU_SOURCE under GCC 16.
+    env.set("CFLAGS", "-D_GNU_SOURCE")
+    env.set("CXXFLAGS", "-D_GNU_SOURCE")
     # find_package() searches CMAKE_PREFIX_PATH, not the wrapper's -I/-L.
-    prefix_path = ":".join([ctx.dep(d).prefix for d in [
+    env.set("CMAKE_PREFIX_PATH", ":".join([ctx.dep(d).prefix for d in [
         "openssl", "curl", "zlib-ng", "expat", "bzip2", "xz", "zstd", "nghttp2",
         "libarchive", "libuv", "librhash", "jsoncpp",
-    ]])
+    ]]))
+
+def install(ctx):
     # Private deps of static libarchive.a; FindLibArchive links only the .a.
     archive_private = "-lcrypto -llzma -lzstd -lbz2 -lz"
     return [
-        setenv("CC", wrapper + "/bin/gcc"),
-        setenv("CXX", wrapper + "/bin/g++"),
-        # Vendored cppdap needs _GNU_SOURCE under GCC 16.
-        setenv("CFLAGS", "-D_GNU_SOURCE"),
-        setenv("CXXFLAGS", "-D_GNU_SOURCE"),
-        setenv("CMAKE_PREFIX_PATH", prefix_path),
         # --bootstrap-system-*: else the wrapper's -I leaks system headers into the
         #   bundled libs the mini-cmake compiles.
         # RPATH_USE_LINK_PATH: survive CMake's install-time RPATH rewrite.

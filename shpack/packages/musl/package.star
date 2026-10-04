@@ -26,13 +26,13 @@ depends_on("grep-boot", type = "build")
 depends_on("gawk-boot", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("dash-boot", type = "build")
 
-def setup_build_environment(ctx):
+def setup_build_environment(ctx, env):
     # musl builds -nostdinc but still needs the kernel uapi (asm/ syscall and
     # signal numbers, some linux/ headers); gcc 4.7 honors C_INCLUDE_PATH.
-    return [setenv("C_INCLUDE_PATH", ctx.dep("linux-headers").prefix + "/include")]
+    env.set("C_INCLUDE_PATH", ctx.dep("linux-headers").prefix + "/include")
 
 def edit(ctx):
     # system()/popen() execv a hardcoded "/bin/sh"; repoint at the store shell.

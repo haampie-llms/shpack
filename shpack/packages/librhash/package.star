@@ -17,19 +17,18 @@ build_system("generic")
 
 depends_on("compiler-wrapper", type = "build")
 depends_on("gmake", type = "build")
-depends_on("sed@4.9-musl", type = "build")
+depends_on("sed@=4.9-musl", type = "build")
 depends_on("grep-boot", type = "build")
-depends_on("gawk@5.3.1", type = "build")
+depends_on("gawk@=5.3.1", type = "build")
 depends_on("diffutils", type = "build")
 depends_on("findutils", type = "build")
-depends_on("tar@1.35-musl", type = "build")
-depends_on("xz@5.2.5-musl", type = "build")
+depends_on("tar@=1.35-musl", type = "build")
+depends_on("xz@=5.2.5-musl", type = "build")
 depends_on("dash", type = "build")
 
 def install(ctx):
     # Hand-written configure (not autotools); honours $CC.
     return [
-        setenv("CC", "gcc"),
         run(ctx.sh, "./configure", "--prefix=" + ctx.prefix,
             "--disable-openssl", "--disable-gettext", "--enable-lib-static"),
         run("make", "SHELL=" + ctx.sh, ctx.makejobs, "lib-static"),

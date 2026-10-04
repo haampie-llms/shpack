@@ -33,6 +33,7 @@ typedef struct Directive {
     const char *kind;       /* version resource depends_on patch license build_system */
     Str *a;                 /* main operand: version, spec, file, license, default */
     Str *sha256, *url, *fname;
+    Str *destination, *placement;  /* resource: where it goes in the source */
     Str *when;              /* verbatim when= string, or NULL */
     const char *when_ver;   /* translated: exact versions, comma separated, or NULL */
     const char *when_arch;  /* translated: amd64/aarch64, or NULL */
@@ -247,17 +248,50 @@ static V d_version(Args *a)
     return None;
 }
 
+/* a relative path with no empty, "." or ".." component */
+static void want_subpath(Str *s, const char *what)
+{
+    const char *p = s->s, *end = s->s + s->len;
+    no_space(s, what);
+    if (s->len == 0 || s->s[0] == '/')
+        star_error("resource: %s must be a relative path, got \"%s\"", what, s->s);
+    while (p < end) {
+        const char *e = memchr(p, '/', end - p);
+        int n = e ? (int)(e - p) : (int)(end - p);
+        if (n == 0 || (n == 1 && p[0] == '.') || (n == 2 && p[0] == '.' && p[1] == '.'))
+            star_error("resource: %s \"%s\": empty, . and .. components are not allowed", what, s->s);
+        p += n + 1;
+    }
+}
+
+/* resource(url=, sha256=, fname=, destination=, placement=, when=), as in
+ * Spack: the archive's top directory (or, if it has several entries, all of
+ * them) goes to <source>/<destination>/<placement>; placement defaults to the
+ * name of that directory, destination to the source directory itself. */
 static V d_resource(Args *a)
 {
-    V url = NULL, sha = NULL, fname = NULL, when = NULL;
+    V url = NULL, sha = NULL, fname = NULL, dest = NULL, place = NULL, when = NULL;
     Directive *d;
-    unpack_args(a, "url?", &url, "sha256?", &sha, "fname?", &fname, "when?", &when, NULL);
+    unpack_args(a, "url?", &url, "sha256?", &sha, "fname?", &fname, "destination?", &dest,
+                "placement?", &place, "when?", &when, NULL);
     d = new_directive("resource");
     d->sha256 = opt_str(sha, "resource");
     d->url = opt_str(url, "resource");
     d->fname = opt_str(fname, "resource");
+    d->destination = opt_str(dest, "resource");
+    d->placement = opt_str(place, "resource");
     no_space(d->url, "url");
     no_space(d->fname, "fname");
+    if (d->destination && d->destination->len == 0)
+        d->destination = NULL;     /* Spack's default, "" */
+    if (d->destination)
+        want_subpath(d->destination, "destination");
+    if (d->placement) {
+        want_subpath(d->placement, "placement");
+        if (strchr(d->placement->s, '/'))
+            star_error("resource: placement \"%s\" is a directory name; use destination= for the parent",
+                       d->placement->s);
+    }
     if (!d->sha256 || !valid_sha256(d->sha256))
         star_error("resource: sha256= (64 lowercase hex digits) is required");
     if (!d->url && !d->fname)
@@ -322,6 +356,12 @@ static V d_depends_on(Args *a)
     no_space(d->a, "spec");
     if (d->a->len == 0 || d->a->s[0] == '@')
         star_error("depends_on: invalid spec \"%s\"", d->a->s);
+    {
+        const char *at = strchr(d->a->s, '@');
+        if (at && (at[1] != '=' || at[2] == 0 || strchr(at + 1, '@') || strchr(at, ',')))
+            star_error("depends_on: \"%s\": use name@=VERSION for an exact version "
+                       "(version ranges are not supported)", d->a->s);
+    }
     d->types = dep_types(type);
     set_when(d, when, 0);
     return handle(d);
@@ -576,23 +616,46 @@ static V a_sh(Args *a)
     return mk_action("sh", 2, names, vals);
 }
 
-static V a_env(Args *a, const char *op)
+/* env, the second argument of setup_build_environment(ctx, env) and of
+ * setup_dependent_build_environment(ctx, env, dependent): Spack's
+ * EnvironmentModifications, as methods that record an action in the list the
+ * env object is bound to (its receiver) and return None. */
+static V env_record(Args *a, const char *op, const char *what, const char *valname)
 {
     V name, value = NULL;
     const char *names[] = {"name", "value"};
     V vals[2];
-    if (strcmp(op, "unsetenv") == 0)
-        unpack_positional(a, 1, 1, &name);
+    if (valname)
+        unpack_args(a, "name", &name, valname, &value, NULL);
     else
-        unpack_positional(a, 2, 2, &name, &value);
-    want_env_name(want_str(name, op), op);
+        unpack_args(a, "name", &name, NULL);
+    want_env_name(want_str(name, what), what);
     vals[0] = name;
-    vals[1] = value ? (V)want_str(value, op) : NULL;
-    return mk_action(op, 2, names, vals);
+    vals[1] = value ? (V)want_str(value, what) : NULL;
+    list_append(a->self, mk_action(op, 2, names, vals));
+    return None;
 }
-static V a_setenv(Args *a) { return a_env(a, "setenv"); }
-static V a_prepend_path(Args *a) { return a_env(a, "prepend_path"); }
-static V a_unsetenv(Args *a) { return a_env(a, "unsetenv"); }
+static V e_set(Args *a) { return env_record(a, "setenv", "env.set", "value"); }
+static V e_unset(Args *a) { return env_record(a, "unsetenv", "env.unset", NULL); }
+static V e_prepend_path(Args *a) { return env_record(a, "prepend_path", "env.prepend_path", "path"); }
+static V e_append_path(Args *a) { return env_record(a, "append_path", "env.append_path", "path"); }
+
+/* An env object recording into the list sink. */
+static V make_env(V sink)
+{
+    static const struct { const char *name; BuiltinFn fn; } m[] = {
+        {"append_path", e_append_path}, {"prepend_path", e_prepend_path},
+        {"set", e_set}, {"unset", e_unset},
+    };
+    Str *names[4];
+    V vals[4];
+    int i;
+    for (i = 0; i < 4; i++) {
+        names[i] = intern(m[i].name);
+        vals[i] = mk_builtin(m[i].name, m[i].fn, sink);
+    }
+    return mk_struct("env", 4, names, vals);
+}
 
 static V a_chdir(Args *a)
 {
@@ -845,37 +908,66 @@ static char *portable_to_bre(Str *re, const char **err)
     return buf_cstr(&b);
 }
 
-static V a_substitute(Args *a)
+/* The replacement of filter_file() as Spack reads it: "\\\\" is one
+ * backslash, and "\\1".."\\9" (groups) are not supported; any other
+ * backslash is literal. Returns the literal text, or NULL with *err set. */
+static Str *spack_repl(Str *r, const char **err)
 {
-    V files, old, new;
-    const char *names[] = {"files", "old", "new"};
-    V vals[3];
-    unpack_args(a, "files", &files, "old", &old, "new", &new, NULL);
-    vals[0] = paths_arg(files, "substitute");
-    vals[1] = (V)want_str(old, "substitute");
-    vals[2] = (V)want_str(new, "substitute");
-    if (AS_STR(old)->len == 0)
-        star_error("substitute: old must not be empty");
-    if (memchr(AS_STR(old)->s, '\n', AS_STR(old)->len))
-        star_error("substitute: old must not contain a newline (matching is per line)");
-    return mk_action("substitute", 3, names, vals);
+    Buf b;
+    int i;
+    buf_init(&b);
+    for (i = 0; i < r->len; i++) {
+        char c = r->s[i];
+        if (c == '\\' && i + 1 < r->len && r->s[i + 1] == '\\') {
+            buf_putc(&b, '\\');
+            i++;
+            continue;
+        }
+        if (c == '\\' && i + 1 < r->len && r->s[i + 1] >= '1' && r->s[i + 1] <= '9') {
+            *err = "groups (\\1..\\9) are not supported";
+            return NULL;
+        }
+        buf_putc(&b, c);
+    }
+    return AS_STR(mk_str(b.p ? b.p : "", b.len));
 }
 
+/* filter_file(regex, repl, *filenames, string = False), as in Spack: replace
+ * every match of regex, line by line. regex is the portable subset (see
+ * portable_to_bre), or with string = True a literal; repl is literal, but for
+ * Spack's escaping of backslashes (spack_repl). */
 static V a_filter_file(Args *a)
 {
-    V files, re, repl;
-    const char *names[] = {"files", "regex", "repl"};
-    V vals[3];
+    V re, repl, files = mk_list(0), string = NULL;
+    const char *names[] = {"files", "regex", "repl", "string"};
+    V vals[4];
     const char *err = NULL;
-    unpack_args(a, "files", &files, "regex", &re, "repl", &repl, NULL);
+    int i;
+    for (i = 0; i < a->nkw; i++) {
+        if (str_eq(a->kwnames[i], "string"))
+            string = a->kwvals[i];
+        else
+            star_error("filter_file: unexpected keyword argument %s", a->kwnames[i]->s);
+    }
+    if (a->npos < 3)
+        star_error("filter_file: want filter_file(regex, repl, *filenames, string = False)");
+    re = a->pos[0];
+    repl = a->pos[1];
+    for (i = 2; i < a->npos; i++)
+        flatten_into(files, a->pos[i], "filter_file", 0);
     vals[0] = paths_arg(files, "filter_file");
     vals[1] = (V)want_str(re, "filter_file");
     vals[2] = (V)want_str(repl, "filter_file");
+    vals[3] = string && truth(string) ? True : NULL;
     if (AS_STR(re)->len == 0)
         star_error("filter_file: empty regex");
-    if (!portable_to_bre(AS_STR(re), &err))
+    if (memchr(AS_STR(re)->s, '\n', AS_STR(re)->len))
+        star_error("filter_file: regex must not contain a newline (matching is per line)");
+    if (!vals[3] && !portable_to_bre(AS_STR(re), &err))
         star_error("filter_file: regex \"%s\": %s", AS_STR(re)->s, err);
-    return mk_action("filter_file", 3, names, vals);
+    if (!spack_repl(AS_STR(repl), &err))
+        star_error("filter_file: repl \"%s\": %s", AS_STR(repl)->s, err);
+    return mk_action("filter_file", 4, names, vals);
 }
 
 /* ------------------------------------------------------------------- when() -- */
@@ -989,12 +1081,11 @@ static const struct { const char *name; BuiltinFn fn; } host_fns[] = {
     {"version", d_version}, {"resource", d_resource}, {"depends_on", d_depends_on},
     {"patch", d_patch}, {"license", d_license}, {"build_system", d_build_system},
     {"conditional", d_conditional}, {"when", d_when},
-    {"run", a_run}, {"sh", a_sh}, {"setenv", a_setenv}, {"prepend_path", a_prepend_path},
-    {"unsetenv", a_unsetenv}, {"chdir", a_chdir}, {"mkdir", a_mkdir}, {"copy", a_copy},
+    {"run", a_run}, {"sh", a_sh}, {"chdir", a_chdir}, {"mkdir", a_mkdir}, {"copy", a_copy},
     {"move", a_move}, {"remove", a_remove}, {"symlink", a_symlink}, {"hardlink", a_hardlink},
     {"symlink_each", a_symlink_each},
     {"chmod", a_chmod}, {"write_file", a_write_file}, {"append_file", a_append_file},
-    {"substitute", a_substitute}, {"filter_file", a_filter_file},
+    {"filter_file", a_filter_file},
     {NULL, NULL}
 };
 
@@ -1228,8 +1319,9 @@ static void emit_shpack(void)
           d->when_ver ? d->when_ver : "-", d->a->s);
     LINES("versions", strcmp(d->kind, "version") == 0, "%s %s %s %s\n",
           d->a->s, dash(d->sha256), default_fname(d), dash(d->url));
-    LINES("resources", strcmp(d->kind, "resource") == 0, "%s %s %s %s\n",
-          d->when_ver ? d->when_ver : "-", d->sha256->s, default_fname(d), dash(d->url));
+    LINES("resources", strcmp(d->kind, "resource") == 0, "%s %s %s %s %s %s\n",
+          d->when_ver ? d->when_ver : "-", d->sha256->s, default_fname(d), dash(d->url),
+          dash(d->destination), dash(d->placement));
     LINES("deps", strcmp(d->kind, "depends_on") == 0, "%s %s %s\n",
           d->when_ver ? d->when_ver : "-", dep_types_str(d->types), d->a->s);
     LINES("patches", strcmp(d->kind, "patch") == 0, "%s level=%lld%s%s%s%s\n",
@@ -1402,6 +1494,8 @@ static void emit_json(void)
             json_opt(&b, "url", d->url);
             buf_puts(&b, ", \"fname\": ");
             json_str(&b, default_fname(d), strlen(default_fname(d)));
+            json_opt(&b, "destination", d->destination);
+            json_opt(&b, "placement", d->placement);
         } else if (strcmp(d->kind, "depends_on") == 0) {
             int j, first = 1;
             json_opt(&b, "spec", d->a);
@@ -1444,7 +1538,15 @@ static void emit_json(void)
 /* -------------------------------------------------------------------- plan -- */
 
 static Dict *ctx_dict;          /* the dict from --ctx */
-static const char *ctx_version, *ctx_arch, *ctx_id;
+static const char *ctx_arch, *ctx_id;
+
+static V dict_key(V d, const char *key, const char *what)
+{
+    V v = dict_get(d, mk_cstr(key));
+    if (!v)
+        star_error("ctx file: %s: missing key \"%s\"", what, key);
+    return v;
+}
 
 static V ctx_get(const char *key, int required)
 {
@@ -1454,16 +1556,18 @@ static V ctx_get(const char *key, int required)
     return v;
 }
 
+/* ctx.dep(name) and ctx.satisfies(when) are bound to the ctx file's dict of
+ * their node: the build's own, or a dependency's (env_deps). */
 static V c_dep(Args *a)
 {
-    V name, deps, p;
+    V name, p;
     Str *n;
     unpack_positional(a, 1, 1, &name);
     n = want_str(name, "dep");
-    deps = ctx_get("deps", 1);
-    p = dict_get(deps, (V)n);
+    p = dict_get(dict_key(a->self, "deps", "dep"), (V)n);
     if (!p)
-        star_error("dep: '%s' is not in the dependency closure of %s", n->s, ctx_id);
+        star_error("dep: '%s' is not in the dependency closure of %s", n->s,
+                   want_str(dict_key(a->self, "id", "dep"), "ctx")->s);
     {
         Str *names[1];
         V vals[1];
@@ -1482,39 +1586,64 @@ static V c_satisfies(Args *a)
     s = want_str(spec, "satisfies");
     if (parse_when(s, &ver, &arch, &err) < 0)
         star_error("satisfies: \"%s\": %s", s->s, err);
-    if (ver && !when_matches(ver, ctx_version))
+    if (ver && !when_matches(ver, want_str(dict_key(a->self, "version", "satisfies"), "ctx")->s))
         return False;
     if (arch && strcmp(arch, ctx_arch) != 0)
         return False;
     return True;
 }
 
-/* The ctx value phases receive: the --ctx fields, plus pkg (the recipe's
- * exported globals), build_directory, and the dep()/satisfies() methods. */
+/* Spack's name for the target family: what when="target=...:" says. */
+static V target_family(const char *arch)
+{
+    return mk_cstr(strcmp(arch, "amd64") == 0 ? "x86_64" : arch);
+}
+
+/* The ctx of a node: KEYS from its ctx-file dict d, its target, and the
+ * dep()/satisfies() methods bound to d; plus EXTRA fields. Frozen. */
+static V node_ctx(V d, const char **keys, int nextra, Str **xn, V *xv)
+{
+    Str *names[40];
+    V vals[40];
+    int n = 0, i;
+    for (i = 0; keys[i]; i++) {
+        names[n] = intern(keys[i]);
+        vals[n++] = dict_key(d, keys[i], "ctx");
+    }
+    names[n] = intern("target");
+    vals[n++] = target_family(ctx_arch);
+    names[n] = intern("dep");
+    vals[n++] = mk_builtin("dep", c_dep, d);
+    names[n] = intern("satisfies");
+    vals[n++] = mk_builtin("satisfies", c_satisfies, d);
+    for (i = 0; i < nextra; i++) {
+        names[n] = xn[i];
+        vals[n++] = xv[i];
+    }
+    {
+        V c = mk_struct("ctx", n, names, vals);
+        freeze_value(c);
+        return c;
+    }
+}
+
+/* The ctx value phases receive: the --ctx fields, plus target, pkg (the
+ * recipe's exported globals), build_directory, and the dep()/satisfies()
+ * methods. */
 static V make_ctx(void)
 {
     static const char *keys[] = {
-        "name", "version", "id", "arch", "prefix", "sh", "stage_dir", "source_dir",
+        "name", "version", "id", "prefix", "sh", "stage_dir", "source_dir",
         "package_dir", "jobs", "makejobs", "file_prefix_map", "debug_prefix_map",
         "package_files", NULL
     };
-    Str *names[32];
-    V vals[32];
-    int n = 0, i;
-    for (i = 0; keys[i]; i++) {
-        V v = ctx_get(keys[i], 1);
-        names[n] = intern(keys[i]);
-        vals[n++] = v;
-    }
-    ctx_version = want_str(ctx_get("version", 1), "ctx")->s;
+    Str *xn[2];
+    V xv[2];
+    int i;
     ctx_arch = want_str(ctx_get("arch", 1), "ctx")->s;
     ctx_id = want_str(ctx_get("id", 1), "ctx")->s;
-    names[n] = intern("dep");
-    vals[n++] = mk_builtin("dep", c_dep, NULL);
-    names[n] = intern("satisfies");
-    vals[n++] = mk_builtin("satisfies", c_satisfies, NULL);
-    names[n] = intern("build_directory");
-    vals[n++] = pkg_build_directory ? (V)pkg_build_directory : None;
+    xn[0] = intern("build_directory");
+    xv[0] = pkg_build_directory ? (V)pkg_build_directory : None;
     {
         Module *m = recipe_module;
         Str **pn = arena_alloc(sizeof(Str *) * (m->nglobals + 1));
@@ -1526,14 +1655,10 @@ static V make_ctx(void)
             pn[k] = m->gnames[i];
             pv[k++] = m->globals[i];
         }
-        names[n] = intern("pkg");
-        vals[n++] = mk_struct("package", k, pn, pv);
+        xn[1] = intern("pkg");
+        xv[1] = mk_struct("package", k, pn, pv);
     }
-    {
-        V c = mk_struct("ctx", n, names, vals);
-        freeze_value(c);
-        return c;
-    }
+    return node_ctx((V)ctx_dict, keys, 2, xn, xv);
 }
 
 static V recipe_global(const char *name)
@@ -1570,13 +1695,55 @@ static void check_actions(V list, const char *phase)
 
 typedef struct Phase { const char *name; V actions; } Phase;
 
+/* A dependency's recipe, loaded for its environment hook only: its
+ * directives run into a scratch record. NULL if the name has no recipe. */
+static Module *load_dep_recipe(const char *name)
+{
+    Directive *sd = dirs;
+    int sn = ndirs, sc = dircap;
+    const char *sname = recipe_name;
+    Buf path;
+    struct stat st;
+    Module *m;
+    buf_init(&path);
+    buf_printf(&path, "%s/%s/package.star", opt_repo, name);
+    if (stat(buf_cstr(&path), &st) != 0)
+        return NULL;
+    dirs = NULL;
+    ndirs = dircap = 0;
+    recipe_name = name;
+    loading = 1;
+    m = load_module(path.p, NULL);
+    loading = 0;
+    dirs = sd;
+    ndirs = sn;
+    dircap = sc;
+    recipe_name = sname;
+    return m;
+}
+
+/* Call an environment hook with (args..., env) and return what it recorded. */
+static V env_hook(V fn, const char *what, int n, V *args)
+{
+    V sink = mk_list(0), argv[3], r;
+    argv[0] = args[0];
+    argv[1] = make_env(sink);
+    if (n > 2)
+        argv[2] = args[2];
+    r = call_simple(fn, n, argv);
+    if (r != None)
+        star_error("%s must return None: it records changes with env.set(...), "
+                   "env.prepend_path(...), ...", what);
+    return sink;
+}
+
 static int plan(Phase **out)
 {
-    V ctx, phases, fn;
+    V ctx, phases, fn, envdeps;
     Module *bs;
     const char *bsname = pick_build_system(want_str(ctx_get("version", 1), "ctx")->s);
     Phase *ph;
-    int i, n = 0;
+    int i, n = 0, ndeps = 0;
     Buf b;
 
     buf_init(&b);
@@ -1588,23 +1755,44 @@ static int plan(Phase **out)
     if (!phases || (TYPE(phases) != T_LIST && TYPE(phases) != T_TUPLE))
         star_error("%s: build system must export a list `phases`", bs->filename);
     phases = to_list(phases);
-    ph = arena_alloc(sizeof(Phase) * (AS_LIST(phases)->len + 2));
+    envdeps = ctx_get("env_deps", 0);
+    if (envdeps) {
+        if (TYPE(envdeps) != T_LIST)
+            star_error("ctx file: env_deps must be a list");
+        ndeps = AS_LIST(envdeps)->len;
+    }
+    ph = arena_alloc(sizeof(Phase) * (AS_LIST(phases)->len + ndeps + 2));
 
-    /* setup_build_environment first: environment actions only */
+    /* As in Spack, the environment is first what the dependencies set up for
+     * their dependents (setup_dependent_build_environment), in the order the
+     * host gives them (dependencies before dependents), then the recipe's own
+     * setup_build_environment. Phases do not change the environment. */
+    for (i = 0; i < ndeps; i++) {
+        static const char *keys[] = {"name", "version", "id", "prefix", NULL};
+        V e = AS_LIST(envdeps)->items[i], args[3];
+        const char *dname = want_str(dict_key(e, "name", "env_deps"), "env_deps")->s;
+        Module *dm = load_dep_recipe(dname);
+        Buf pn;
+        if (!dm || !(fn = module_global(dm, "setup_dependent_build_environment")))
+            continue;
+        args[0] = node_ctx(e, keys, 0, NULL, NULL);
+        args[2] = ctx;
+        buf_init(&pn);
+        buf_printf(&pn, "setup_dependent_build_environment(%s)",
+                   want_str(dict_key(e, "id", "env_deps"), "env_deps")->s);
+        ph[n].name = buf_cstr(&pn);
+        ph[n].actions = env_hook(fn, ph[n].name, 3, args);
+        n++;
+    }
     fn = recipe_global("setup_build_environment");
     if (!fn)
         fn = module_global(bs, "setup_build_environment");
     if (fn) {
-        V acts = call_simple(fn, 1, &ctx);
-        check_actions(acts, "setup_build_environment");
-        acts = to_list(acts);
-        for (i = 0; i < AS_LIST(acts)->len; i++) {
-            const char *op = AS_STR(field(AS_LIST(acts)->items[i], "op"))->s;
-            if (strcmp(op, "setenv") && strcmp(op, "prepend_path") && strcmp(op, "unsetenv"))
-                star_error("setup_build_environment: only setenv/prepend_path/unsetenv actions are allowed, got %s", op);
-        }
+        V args[2];
+        args[0] = ctx;
         ph[n].name = "setup_build_environment";
-        ph[n++].actions = acts;
+        ph[n].actions = env_hook(fn, "setup_build_environment", 2, args);
+        n++;
     }
     for (i = 0; i < AS_LIST(phases)->len; i++) {
         Str *pname = want_str(AS_LIST(phases)->items[i], "phases");
@@ -1804,6 +1992,10 @@ static void render_action(Buf *b, V act)
         buf_printf(b, "export %s=", n);
         sqv(b, field(act, "value"));
         buf_printf(b, "\"${%s:+:$%s}\"", n, n);
+    } else if (strcmp(op, "append_path") == 0) {
+        const char *n = AS_STR(field(act, "name"))->s;
+        buf_printf(b, "export %s=\"${%s:+$%s:}\"", n, n, n);
+        sqv(b, field(act, "value"));
     } else if (strcmp(op, "unsetenv") == 0) {
         buf_printf(b, "unset %s", AS_STR(field(act, "name"))->s);
     } else if (strcmp(op, "chdir") == 0) {
@@ -1877,10 +2069,11 @@ static void render_action(Buf *b, V act)
             buf_printf(b, "\nchmod %s ", AS_STR(v)->s);
             sqv(b, field(act, "path"));
         }
-    } else if (strcmp(op, "substitute") == 0 || strcmp(op, "filter_file") == 0) {
-        int lit = strcmp(op, "substitute") == 0;
-        Str *pat = AS_STR(field(act, lit ? "old" : "regex"));
-        Str *rep = AS_STR(field(act, lit ? "new" : "repl"));
+    } else if (strcmp(op, "filter_file") == 0) {
+        int lit = field(act, "string") != NULL;
+        Str *pat = AS_STR(field(act, "regex"));
+        const char *err;
+        Str *rep = spack_repl(AS_STR(field(act, "repl")), &err);
         char delim = pick_delim(pat, rep);
         Buf e;
         buf_init(&e);
@@ -1893,7 +2086,6 @@ static void render_action(Buf *b, V act)
                 buf_putc(&e, c);
             }
         } else {
-            const char *err;
             char *bre = portable_to_bre(pat, &err);
             for (i = 0; bre[i]; i++) {
                 if (bre[i] == delim)
@@ -1920,7 +2112,7 @@ static void render_sh(Phase *ph, int n)
     buf_init(&b);
     buf_printf(&b, "# Generated by star %s plan for %s. Do not edit.\n", STAR_VERSION, ctx_id);
     for (i = 0; i < n; i++) {
-        if (strcmp(ph[i].name, "setup_build_environment") != 0)
+        if (strncmp(ph[i].name, "setup_", 6) != 0)
             buf_printf(&b, "echo '==> %s: %s'\n", ctx_id, ph[i].name);
         for (j = 0; j < AS_LIST(ph[i].actions)->len; j++)
             render_action(&b, AS_LIST(ph[i].actions)->items[j]);
